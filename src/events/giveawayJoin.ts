@@ -1,5 +1,8 @@
-import { ButtonInteraction, EmbedBuilder, TextChannel } from 'discord.js';
+import { ButtonInteraction, TextChannel, EmbedBuilder } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
+
+const userCooldowns = new Map<string, number>();
+const cooldownTime = 10 * 1000;
 
 export async function executeJoinLeave(interaction: ButtonInteraction) {
   try {
@@ -7,75 +10,112 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     const isJoining = interaction.customId.startsWith("join-");
     const userId = interaction.user.id;
-    const giveawayId = interaction.customId.split("-")[1];
+    const giveawayMessageId = interaction.customId.split("-")[1];
 
-    if (!giveawayId) {
-      return interaction.reply({ content: "❌ Invalid giveaway data. Please try again.", ephemeral: true });
-    }
+    console.log(`🔍 Looking up giveaway with messageId: ${giveawayMessageId}`);
 
-    let giveaway = await Giveaway.findByPk(giveawayId);
+    // ✅ Fetch giveaway using Sequelize (WITHOUT `raw: true`)
+    let giveaway = await Giveaway.findOne({ where: { messageId: giveawayMessageId } });
+
     if (!giveaway) {
-      return interaction.reply({ content: "❌ Giveaway has ended or no longer exists.", ephemeral: true });
+      console.error(`❌ Giveaway not found for message ID: ${giveawayMessageId}`);
+      return await interaction.reply({ content: "❌ This giveaway has ended or is corrupted.", ephemeral: true });
     }
 
+    // ✅ Ensure the giveaway is not expired
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (giveaway.get("endsAt") <= currentTime) {
+      return await interaction.reply({ content: "❌ This giveaway has already ended!", ephemeral: true });
+    }
+
+    // ✅ Fetch Channel ID Properly
+    const channelId = giveaway.get("channelId") ?? null;
+    if (!channelId) {
+      console.error(`❌ Channel ID is missing for Giveaway ID: ${giveaway.get("id")}`);
+      return await interaction.reply({ content: "❌ Giveaway channel data is missing.", ephemeral: true });
+    }
+
+    // ✅ Fetch the correct Discord channel
+    const channel = interaction.client.channels.cache.get(channelId) as TextChannel;
+    if (!channel) {
+      console.error(`❌ Channel ID ${channelId} not found!`);
+      return await interaction.reply({ content: "❌ This giveaway channel no longer exists.", ephemeral: true });
+    }
+
+    let giveawayMessage;
+    try {
+      giveawayMessage = await channel.messages.fetch(giveaway.get("messageId"));
+    } catch (error) {
+      console.warn(`⚠️ Giveaway message not found for ID ${giveawayMessageId}.`);
+      return await interaction.reply({ content: "❌ Giveaway message was deleted or is missing.", ephemeral: true });
+    }
+
+    if (!giveawayMessage) {
+      console.warn(`⚠️ Giveaway message is undefined for ID ${giveaway.get("id")}.`);
+      return;
+    }
+
+    // ✅ Ensure participants are properly retrieved
     let participants: string[] = [];
     try {
-      participants = JSON.parse(giveaway.participants);
+      participants = JSON.parse(giveaway.get("participants") ?? "[]");
+      if (!Array.isArray(participants)) participants = [];
     } catch (error) {
-      console.error(`❌ Error parsing participants for Giveaway ${giveaway.id}:`, error);
+      console.error(`❌ Error parsing participants for Giveaway ${giveaway.get("id")}:`, error);
+      participants = [];
     }
 
     const alreadyJoined = participants.includes(userId);
 
-    if (isJoining) {
-      if (alreadyJoined) {
-        return interaction.reply({ content: "⚠️ You have already joined this giveaway!", ephemeral: true });
+    // ✅ Apply cooldown check
+    if (userCooldowns.has(userId)) {
+      const lastUsed = userCooldowns.get(userId)!;
+      if (Date.now() - lastUsed < cooldownTime) {
+        return await interaction.reply({ content: "⚠️ Please wait before joining/leaving again!", ephemeral: true });
       }
+    }
+    userCooldowns.set(userId, Date.now());
+
+    // ✅ Prevent duplicate joins and leaving non-existent entries
+    if (isJoining && alreadyJoined) {
+      return await interaction.reply({ content: "⚠️ You have already joined this giveaway!", ephemeral: true });
+    }
+    if (!isJoining && !alreadyJoined) {
+      return await interaction.reply({ content: "⚠️ You are not in this giveaway!", ephemeral: true });
+    }
+
+    // ✅ Add or remove user from participants list
+    if (isJoining) {
       participants.push(userId);
     } else {
-      if (!alreadyJoined) {
-        return interaction.reply({ content: "⚠️ You are not in this giveaway!", ephemeral: true });
-      }
       participants = participants.filter(id => id !== userId);
     }
 
-    giveaway.participants = JSON.stringify(participants);
-    await giveaway.save();
+    // ✅ Save updated participants list using Sequelize
+    await Giveaway.update(
+        { participants: JSON.stringify(participants) },
+        { where: { messageId: giveawayMessageId } }
+    );
 
-    const channel = interaction.channel as TextChannel;
-    let giveawayMessage;
+    console.log(`✅ Updated participants for Giveaway ID: ${giveaway.get("id")}, Total: ${participants.length}`);
 
-    // ✅ **Fix: Ensure `messageId` is valid before fetching**
-    if (!giveaway.messageId || typeof giveaway.messageId !== "string") {
-      console.warn(`⚠️ Giveaway messageId is missing or invalid for ID ${giveaway.id}. Skipping update.`);
-      return interaction.reply({ content: "⚠️ Giveaway message not found. Skipping update.", ephemeral: true });
-    }
-
-    try {
-      giveawayMessage = await channel.messages.fetch(giveaway.messageId);
-    } catch (error) {
-      console.warn(`⚠️ Giveaway message not found for ID ${giveaway.messageId}. Skipping update.`);
-      return;
-    }
-
-    if (!giveawayMessage) {
-      console.warn(`⚠️ Giveaway message is undefined for ID ${giveaway.id}.`);
-      return;
-    }
-
+    // ✅ Ensure embed updates correctly
     const embed = EmbedBuilder.from(giveawayMessage.embeds[0]);
     embed.setFields([
-      { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true }
+      { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
+      { name: "🏆 Winners", value: `${giveaway.get("winnerCount") ?? "N/A"}`, inline: true },
+      { name: "⏳ Ends In", value: giveaway.get("endsAt") ? `<t:${giveaway.get("endsAt")}:R>` : "N/A", inline: true }
     ]);
 
     await giveawayMessage.edit({ embeds: [embed] });
 
-    await interaction.reply({
+    return await interaction.reply({
       content: isJoining ? "✅ You have successfully joined the giveaway!" : "✅ You have left the giveaway.",
       ephemeral: true
     });
 
   } catch (error) {
     console.error("❌ Error handling giveaway join/leave:", error);
+    return await interaction.reply({ content: "❌ An error occurred. Please try again later.", ephemeral: true });
   }
 }

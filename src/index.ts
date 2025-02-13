@@ -40,8 +40,9 @@ async function startBot() {
       console.log(`✅ Bot is online! Logged in as ${client.user?.tag}`);
 
       setInterval(() => {
+        console.log("🔍 Checking for expired giveaways...");
         handleGiveawayEnd(client);
-      }, 1000);
+      }, 60 * 1000);
     });
 
     client.on(Events.MessageCreate, async (message) => {
@@ -87,7 +88,7 @@ async function startBot() {
             await executeSaveTemplate(message, args);
             break;
           case 'starttemplate':
-            await executeStartTemplate(message, args, client);
+            await executeStartTemplate(message, args);
             break;
           case 'listtemplates':
             await executeListTemplates(message);

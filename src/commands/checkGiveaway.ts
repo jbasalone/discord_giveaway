@@ -1,26 +1,29 @@
-import { Message, EmbedBuilder, TextChannel } from 'discord.js';
-import { Giveaway } from '../models/Giveaway';
-import { startLiveCountdown } from '../utils/giveawayTimer';
+import { Message, EmbedBuilder } from 'discord.js';
+import { getGiveaway } from '../utils/getGiveaway';
 
-export async function executeCheckGiveaway(message: Message) {
-    try {
-        const activeGiveaways = await Giveaway.findAll({
-            where: { endsAt: { $gt: Date.now() } }
-        });
-
-        if (activeGiveaways.length === 0) {
-            return message.reply("⚠️ No active giveaways found.");
-        }
-
-        let response = "**🎉 Active Giveaways:**\n";
-        for (const giveaway of activeGiveaways) {
-            const timeLeft = Math.floor((giveaway.endsAt - Date.now()) / 1000);
-            response += `📢 **${giveaway.title}** - Ends in ${timeLeft}s - [Go to Giveaway](https://discord.com/channels/${message.guildId}/${giveaway.channelId}/${giveaway.messageId})\n`;
-        }
-
-        await message.reply(response);
-    } catch (error) {
-        console.error("❌ Error checking giveaways:", error);
-        await message.reply("❌ Unable to retrieve giveaways.");
+export async function execute(message: Message, args: string[]) {
+    if (args.length < 1) {
+        return message.reply("❌ Usage: `!ga check <giveawayID>` - Check giveaway status.");
     }
+
+    const giveawayId = args[0];
+
+    let giveaway = await getGiveaway(giveawayId);
+    if (!giveaway) {
+        return message.reply("❌ Giveaway not found or has ended.");
+    }
+
+    const participants = JSON.parse(giveaway.participants || "[]");
+
+    const embed = new EmbedBuilder()
+        .setTitle("🎉 Giveaway Status")
+        .setDescription(`**Title:** ${giveaway.title}`)
+        .setColor("Blue")
+        .addFields([
+            { name: "⏳ Ends In", value: `<t:${giveaway.endsAt}:R>`, inline: true },
+            { name: "🏆 Winners", value: `${giveaway.winnerCount}`, inline: true },
+            { name: "🎟️ Participants", value: `${participants.length} users`, inline: true }
+        ]);
+
+    return message.reply({ embeds: [embed] });
 }

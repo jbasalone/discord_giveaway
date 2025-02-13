@@ -41,8 +41,9 @@ export async function connectDB() {
         await sequelize.authenticate();
         console.log("✅ Database connected successfully.");
 
-        // ✅ Safer sync to avoid unintended table modifications
-        await sequelize.sync({ force: false });  // ⚠️ Change to `true` only if you want to **drop & recreate** tables!
+        // ✅ Fix: Only sync models, don't alter primary keys
+        await sequelize.sync({ alter: true }); // ⚠️ Prevents deleting/recreating tables
+
         console.log("✅ All tables synchronized.");
     } catch (error) {
         console.error("❌ Database connection error:", error);

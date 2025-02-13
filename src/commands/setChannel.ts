@@ -1,28 +1,34 @@
-import { Message } from "discord.js";
+import { Message, PermissionsBitField, TextChannel } from "discord.js";
 import { GuildSettings } from "../models/GuildSettings";
 
 export async function execute(message: Message, args: string[]) {
-    if (!message.member?.permissions.has("Administrator")) {
-        return message.reply("❌ You need Administrator permissions to set a giveaway channel.");
+    if (!message.guild) {
+        return message.reply("❌ This command must be used inside a server.");
     }
 
-    const channel = message.mentions.channels.first();
-    if (!channel) {
-        return message.reply("❌ Please mention a valid channel. Example: `!ga setchannel #giveaways`");
+    if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return message.reply("❌ You need **Administrator** permissions to set a giveaway channel.");
     }
 
-    const guildId = message.guild!.id;
+    const botMember = message.guild.members.me;
+    if (!botMember || !botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+        return message.reply("❌ I don't have permission to **Manage Channels** in this server.");
+    }
+
+    const channel = message.mentions.channels.first() as TextChannel;
+    if (!channel || !channel.isTextBased()) {
+        return message.reply("❌ Please **mention a valid text channel**.");
+    }
 
     try {
-        // ✅ Update or Insert Channel into GuildSettings
         await GuildSettings.upsert({
-            guildId: guildId,
+            guildId: message.guild.id,
             giveawayChannel: channel.id
         });
 
-        return message.reply(`✅ Giveaway channel has been set to ${channel}.`);
+        return message.reply(`✅ **Giveaway channel has been set to** ${channel}.`);
     } catch (error) {
         console.error("❌ Error setting giveaway channel:", error);
-        return message.reply("❌ Failed to set giveaway channel. Please try again.");
+        return message.reply("❌ **Failed to set the giveaway channel.** Please try again.");
     }
 }

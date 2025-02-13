@@ -1,48 +1,65 @@
-import { Message, EmbedBuilder } from 'discord.js';
+import { Message, EmbedBuilder, PermissionsBitField, Colors } from 'discord.js';
 import { getGuildPrefix } from '../utils/getGuildPrefix';
 import { GuildSettings } from '../models/GuildSettings';
 import { ExtraEntries } from '../models/ExtraEntries';
 import config from '../config.json';
 
 export async function execute(message: Message, guildId?: string) {
-  if (!message.member?.permissions.has("Administrator")) {
-    return message.reply("❌ You need Administrator permissions to view the guild configuration.");
+  if (!message.guild) {
+    return message.reply("❌ This command must be used inside a server.");
   }
 
-  if (!guildId) guildId = message.guild!.id;
+  if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    return message.reply("❌ You need **Administrator** permissions to view the guild configuration.");
+  }
 
-  const prefix = await getGuildPrefix(guildId);
-  const guildSettings = await GuildSettings.findOne({ where: { guildId }, raw: true }); // ✅ Fetch from `guild_settings`
-  const extraEntries = await ExtraEntries.findAll({ where: { guildId } });
+  guildId = guildId || message.guild.id;
 
-  const defaultRoleId = guildSettings?.defaultGiveawayRoleId;
-  const defaultRoleMention = defaultRoleId ? `<@&${defaultRoleId}>` : "❌ Not Set";
+  try {
+    // ✅ Fetch all necessary settings
+    const prefix = await getGuildPrefix(guildId);
+    const guildSettings = await GuildSettings.findOne({ where: { guildId } });
+    const extraEntries = await ExtraEntries.findAll({ where: { guildId } });
 
-  // ✅ Fetch Miniboss Channel
-  const minibossChannelId = guildSettings?.minibossChannelId;
-  const minibossChannelMention = minibossChannelId ? `<#${minibossChannelId}>` : "❌ Not Set";
+    // ✅ Default Giveaway Role
+    const defaultRoleId = guildSettings?.defaultGiveawayRoleId;
+    const defaultRoleMention = defaultRoleId ? `<@&${defaultRoleId}>` : "❌ Not Set";
 
-  let extraEntriesText = extraEntries.length > 0
-      ? extraEntries.map(entry => `<@&${entry.roleId}> ➝ **+${entry.bonusEntries} entries**`).join("\n")
-      : "❌ No extra entry roles set.";
+    // ✅ Miniboss Channel
+    const minibossChannelId = guildSettings?.minibossChannelId;
+    const minibossChannelMention = minibossChannelId ? `<#${minibossChannelId}>` : "❌ Not Set";
 
-  const allowedChannels: string[] = (config.allowedGuilds as Record<string, string[]>)[guildId] || [];
-  let allowedChannelsText = allowedChannels.length > 0
-      ? allowedChannels.map((channelId: string) => `<#${channelId}>`).join("\n")
-      : "❌ No restricted giveaway channels.";
+    // ✅ Extra Entry Roles
+    const extraEntriesText = extraEntries.length > 0
+        ? extraEntries.map(entry => `<@&${entry.roleId}> ➝ **+${entry.bonusEntries} entries**`).join("\n")
+        : "❌ No extra entry roles set.";
 
-  const embed = new EmbedBuilder()
-      .setTitle(`⚙️ Server Giveaway Configuration`)
-      .setDescription(`Here are the current giveaway settings for **${message.guild!.name}**.`)
-      .addFields(
-          { name: "🛠 Prefix", value: `\`${prefix}\``, inline: true },
-          { name: "🎭 Default Giveaway Role", value: defaultRoleMention, inline: true },
-          { name: "📌 Miniboss Channel", value: minibossChannelMention, inline: true }, // ✅ Now correctly displays Miniboss channel
-          { name: "➕ Extra Entry Roles", value: extraEntriesText, inline: false },
-          { name: "📢 Allowed Giveaway Channels", value: allowedChannelsText, inline: false }
-      )
-      .setColor("Blue")
-      .setFooter({ text: "Only server admins can modify these settings." });
+    // ✅ Allowed Giveaway Channels (Ensure correct structure)
+    const allowedGuilds: Record<string, string[]> = config.allowedGuilds;
+    const allowedChannels = allowedGuilds[guildId] ?? [];
 
-  await message.reply({ embeds: [embed] });
+    // ✅ Fix: Convert `allowedChannels` to a readable string for embed
+    const allowedChannelsText = allowedChannels.length > 0
+        ? allowedChannels.map(channelId => `<#${channelId}>`).join("\n")
+        : "❌ No restricted giveaway channels.";
+
+    // ✅ Create Embed
+    const embed = new EmbedBuilder()
+        .setTitle(`⚙️ Server Giveaway Configuration`)
+        .setDescription(`Here are the current giveaway settings for **${message.guild.name}**.`)
+        .setColor(Colors.Blue)
+        .addFields(
+            { name: "🛠 Prefix", value: `\`${prefix}\``, inline: true },
+            { name: "🎭 Default Giveaway Role", value: defaultRoleMention, inline: true },
+            { name: "📌 Miniboss Channel", value: minibossChannelMention, inline: true },
+            { name: "➕ Extra Entry Roles", value: extraEntriesText, inline: false },
+            { name: "📢 Allowed Giveaway Channels", value: allowedChannelsText, inline: false }
+        )
+        .setFooter({ text: "Only server admins can modify these settings." });
+
+    await message.reply({ embeds: [embed] });
+  } catch (error) {
+    console.error("❌ Error fetching guild configuration:", error);
+    return message.reply("❌ **Failed to retrieve guild configuration.** Please try again.");
+  }
 }

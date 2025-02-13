@@ -1,92 +1,101 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel } from 'discord.js';
+import { Message, EmbedBuilder, TextChannel, PermissionsBitField } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
-import { convertToMilliseconds } from '../utils/convertTime';
 import { startLiveCountdown } from '../utils/giveawayTimer';
-import { client } from '../index';
+import { convertToMilliseconds } from '../utils/convertTime';
 
 export async function execute(message: Message, args: string[]) {
+    if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return message.reply("❌ You need `Administrator` permission to start a custom giveaway.");
+    }
+
+    if (args.length < 3) {
+        return message.reply("❌ Usage: `!ga custom <title> <duration> <winners>` - Starts a Custom Giveaway.");
+    }
+
+    const title = args.slice(0, args.length - 2).join(" ");
+    const durationArg = args[args.length - 2];
+    const winnerCountArg = args[args.length - 1];
+
+    const duration = convertToMilliseconds(durationArg);
+    if (duration <= 0) {
+        return message.reply("❌ Invalid duration format. Example: `30s`, `5m`, `1h`.");
+    }
+
+    const winnerCount = parseInt(winnerCountArg, 10);
+    if (isNaN(winnerCount) || winnerCount < 1) {
+        return message.reply("❌ Winner count must be a positive number.");
+    }
+
+    const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
+    const channel = message.channel as TextChannel;
+    const guildId = message.guild?.id;
+
+    if (!guildId) {
+        return message.reply("❌ Error: Unable to determine the server ID.");
+    }
+
+    let giveaway = await Giveaway.findOne({ where: { title } });
+    if (giveaway) {
+        return message.reply("⚠️ A giveaway with this title already exists. Please use a different title.");
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🎁 **Custom Giveaway: ${title}** 🎁`)
+        .setDescription("React with 🎉 to enter!")
+        .setColor("Blue")
+        .addFields([
+            { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
+            { name: "🏆 Winners", value: `${winnerCount}`, inline: true },
+            { name: "🎟️ Participants", value: "0 users", inline: true }
+        ]);
+
+    let giveawayMessage;
     try {
-        if (args.length < 3) {
-            return message.reply("❌ Invalid usage! Example: `!ga custom \"Mega Prize\" 10m 3 --field \"Requirement: Level 50+\"`");
-        }
+        giveawayMessage = await channel.send({ embeds: [embed] });
+    } catch (error) {
+        console.error("❌ Failed to send custom giveaway message:", error);
+        return message.reply("❌ Could not start custom giveaway. Bot might lack permissions.");
+    }
 
-        const titleMatch = message.content.match(/"(.+?)"/);
-        const title = titleMatch ? titleMatch[1] : '🎉 Custom Giveaway 🎉';
+    const transaction = await Giveaway.sequelize?.transaction();
+    if (!transaction) {
+        console.error("❌ Unable to initialize database transaction.");
+        return message.reply("❌ Database error. Try again later.");
+    }
 
-        const durationArg = args.find(arg => arg.match(/\d+[smhd]/)) || '1m';
-        const winnerCountArg = args.find(arg => !isNaN(Number(arg))) || '1';
-
-        const duration = convertToMilliseconds(durationArg);
-        if (duration <= 0) return message.reply("❌ Invalid duration!");
-
-        const winnerCount = parseInt(winnerCountArg, 10);
-        if (isNaN(winnerCount) || winnerCount < 1) return message.reply("❌ Invalid winner count!");
-
-        const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
-        const channel = message.channel as TextChannel;
-        const guildId = message.guild?.id;
-
-        if (!guildId) {
-            return message.reply("❌ This command must be used in a server.");
-        }
-
-        // ✅ Extract & store named `--field` values correctly
-        const extraFields: { name: string; value: string }[] = [];
-        const fieldRegex = /--field\s"(.+?):\s(.+?)"/g;
-        let match: RegExpExecArray | null;
-
-        while ((match = fieldRegex.exec(message.content)) !== null) {
-            const fieldName = match[1]?.trim() || `📌 Info`;
-            const fieldValue = match[2]?.trim() || "No description provided";
-
-            if (fieldName && fieldValue && !extraFields.some(field => field.name === `📌 ${fieldName}`)) {
-                extraFields.push({ name: `📌 ${fieldName}`, value: fieldValue });
-            }
-        }
-
-        // ✅ Ensure giveaway is correctly stored
-        const giveawayData = await Giveaway.create({
-            guildId, // ✅ Fix: Store guild ID
+    let giveawayData;
+    try {
+        giveawayData = await Giveaway.create({
+            guildId,
             host: message.author.id,
             channelId: channel.id,
-            messageId: null, // ✅ Correctly initialize messageId
+            messageId: giveawayMessage.id,
             title,
-            description: 'React with 🎉 to enter!',
-            role: null,
+            description: "React with 🎉 to enter!",
             duration,
             endsAt,
-            participants: JSON.stringify([]), // ✅ Ensure correct JSON array storage
-            winnerCount,
-            extraFields: JSON.stringify(extraFields)
-        });
+            participants: JSON.stringify([]),
+            winnerCount
+        }, { transaction });
 
-        const embed = new EmbedBuilder()
-            .setTitle(title)
-            .setDescription("React with 🎉 to enter!")
-            .setColor("Gold")
-            .setFields([
-                ...extraFields,
-                { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-                { name: "🏆 Winners", value: `${winnerCount}`, inline: true },
-                { name: "🎟️ Total Participants", value: `0 users`, inline: true }
-            ]);
-
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId(`join-${giveawayData.id}`).setLabel('Join 🎉').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`leave-${giveawayData.id}`).setLabel('Leave ❌').setStyle(ButtonStyle.Danger)
-        );
-
-        const giveawayMessage = await channel.send({ embeds: [embed] });
-
-        giveawayData.messageId = giveawayMessage.id;
-        await giveawayData.save();
-
-        // ✅ Start the live countdown after saving
-        startLiveCountdown(giveawayData.id, client);
-
-        return message.reply(`✅ Giveaway started! React with 🎉 in [this message](${giveawayMessage.url}).`);
+        await transaction.commit();
+        console.log(`✅ Custom Giveaway successfully saved with messageId: ${giveawayData.get("messageId")}`);
     } catch (error) {
-        console.error("❌ Error starting custom giveaway:", error);
-        return message.reply("❌ Failed to start the giveaway. Please check logs.");
+        await transaction.rollback();
+        console.error("❌ Error saving custom giveaway:", error);
+        return message.reply("❌ Failed to save the custom giveaway.");
     }
+
+    if (!giveawayData?.id) {
+        console.error("❌ Giveaway ID is undefined. Skipping countdown.");
+        return message.reply("❌ Giveaway ID is missing, please check logs.");
+    }
+
+    startLiveCountdown(giveawayData.id, message.client);
+
+    if (!giveawayMessage.url) {
+        return message.reply(`✅ Custom Giveaway **${title}** started! Check the channel for the giveaway message.`);
+    }
+
+    return message.reply(`✅ Custom Giveaway **${title}** started! React with 🎉 in [this message](${giveawayMessage.url}).`);
 }

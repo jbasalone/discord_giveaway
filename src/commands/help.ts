@@ -1,4 +1,4 @@
-import { Message, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, Interaction } from 'discord.js';
+import { Message, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, Interaction } from 'discord.js';
 
 export async function execute(message: Message) {
     try {
@@ -14,10 +14,10 @@ export async function execute(message: Message) {
                 .setCustomId("help-menu")
                 .setPlaceholder("📜 Select a command category...")
                 .addOptions(
-                    new StringSelectMenuOptionBuilder().setLabel("🎉 Basic Commands").setValue("basic"),
-                    new StringSelectMenuOptionBuilder().setLabel("📜 Template Commands").setValue("template"),
-                    new StringSelectMenuOptionBuilder().setLabel("⚙️ Admin Commands").setValue("admin"),
-                    new StringSelectMenuOptionBuilder().setLabel("👑 Miniboss Commands").setValue("miniboss") // ✅ New Miniboss Category
+                    { label: "🎉 Basic Commands", value: "basic" },
+                    { label: "📜 Template Commands", value: "template" },
+                    { label: "⚙️ Admin Commands", value: "admin" },
+                    { label: "👑 Miniboss Commands", value: "miniboss" } // ✅ New Miniboss Category
                 )
         );
 
@@ -41,25 +41,25 @@ export async function handleHelpSelection(interaction: Interaction) {
         const commands: Record<string, { name: string; value: string }[]> = {
             "basic": [
                 { name: "`!ga create <duration> <winners>`", value: "🎉 Starts a new giveaway. Example: `!ga create 30s 1`" },
-                { name: "`!ga custom <title> <duration> <winners> --field \"name: description\"`", value: "🛠 Starts a custom giveaway with named fields. Example: `!ga custom \"Gold Giveaway\" 1m 1 --field \"Requirement: Level 50+\"`" },
+                { name: "`!ga custom <title> <duration> <winners>`", value: "🛠 Starts a custom giveaway with named fields." },
                 { name: "`!ga reroll <giveawayID>`", value: "🔄 **Rerolls winners** for a completed giveaway." },
-                { name: "`!ga setchannel <#channel>`", value: "📢 Sets a custom giveaway channel. Example: `!ga setchannel #giveaways`" }
+                { name: "`!ga setchannel <#channel>`", value: "📢 Sets a custom giveaway channel." }
             ],
             "template": [
                 { name: "`!ga save <name>`", value: "💾 Saves the current giveaway setup as a template." },
                 { name: "`!ga starttemplate <name>`", value: "🚀 Starts a giveaway from a saved template." },
                 { name: "`!ga listtemplates`", value: "📜 Lists all saved giveaway templates." },
-                { name: "`!ga deletetemplate <name>`", value: "❌ Deletes a saved giveaway template." },
+                { name: "`!ga deletetemplate <name>`", value: "❌ Deletes a saved giveaway template." }
             ],
             "admin": [
                 { name: "`!ga setprefix <prefix>`", value: "⚙️ Sets a custom prefix for the server." },
                 { name: "`!ga showconfig`", value: "📋 Displays the current giveaway settings for the server." },
-                { name: "`!ga setextraentry @role <entries>`", value: "📌 Assigns extra giveaway entries to a role. Example: `!ga setextraentry @VIP 3`" },
-                { name: "`!ga setminibosschannel <#channel>`", value: "👑 Sets the Miniboss Event channel for automatic management." } // ✅ New Miniboss Channel Config
+                { name: "`!ga setextraentry @role <entries>`", value: "📌 Assigns extra giveaway entries to a role." },
+                { name: "`!ga setminibosschannel <#channel>`", value: "👑 Sets the Miniboss Event channel." }
             ],
             "miniboss": [
-                { name: "`!ga miniboss <title> <duration> --force --field \"name: description\"`", value: "👑 Starts a Miniboss Giveaway. Use `--force` to ensure all users win if under 9 participants." },
-                { name: "`!ga mb <title> <duration> --force --field \"name: description\"`", value: "⚔️ Short alias for `!ga miniboss`." },
+                { name: "`!ga miniboss <title> <duration>`", value: "👑 Starts a Miniboss Giveaway." },
+                { name: "`!ga mb <title> <duration>`", value: "⚔️ Short alias for `!ga miniboss`." },
                 { name: "`!ga setminibosschannel <#channel>`", value: "🏆 Sets a custom miniboss event channel." }
             ]
         };
@@ -76,7 +76,7 @@ export async function handleHelpSelection(interaction: Interaction) {
             .setTitle(`📜 ${category.charAt(0).toUpperCase() + category.slice(1)} Commands`)
             .setDescription("Here are the commands for this category:")
             .setColor("Blue")
-            .addFields(selectedCommands.map((cmd) => ({ name: cmd.name, value: cmd.value }))); // ✅ Properly type `cmd`
+            .addFields(selectedCommands.map((cmd) => ({ name: cmd.name, value: cmd.value })));
 
         // ✅ Keep the menu selector after updating the message
         const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -84,10 +84,10 @@ export async function handleHelpSelection(interaction: Interaction) {
                 .setCustomId("help-menu")
                 .setPlaceholder("📜 Select a command category...")
                 .addOptions(
-                    new StringSelectMenuOptionBuilder().setLabel("🎉 Basic Commands").setValue("basic"),
-                    new StringSelectMenuOptionBuilder().setLabel("📜 Template Commands").setValue("template"),
-                    new StringSelectMenuOptionBuilder().setLabel("⚙️ Admin Commands").setValue("admin"),
-                    new StringSelectMenuOptionBuilder().setLabel("👑 Miniboss Commands").setValue("miniboss") // ✅ New Miniboss Category
+                    { label: "🎉 Basic Commands", value: "basic" },
+                    { label: "📜 Template Commands", value: "template" },
+                    { label: "⚙️ Admin Commands", value: "admin" },
+                    { label: "👑 Miniboss Commands", value: "miniboss" } // ✅ Keeps Miniboss Category
                 )
         );
 

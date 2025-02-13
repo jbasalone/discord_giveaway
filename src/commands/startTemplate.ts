@@ -1,80 +1,74 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel } from 'discord.js';
+import { Message, EmbedBuilder, TextChannel } from 'discord.js';
 import { SavedGiveaway } from '../models/SavedGiveaway';
 import { Giveaway } from '../models/Giveaway';
-import { Client } from 'discord.js';
-import { startLiveCountdown } from '../utils/giveawayTimer';
+import { updateGiveawayEmbed } from '../utils/updateGiveawayEmbed';
 
-export async function execute(message: Message, args: string[], client: Client) {
-  try {
-    if (args.length < 1) return message.reply("❌ Invalid usage! Example: `!ga starttemplate \"Weekly Giveaway\"`");
+/**
+ * Converts seconds into `hh:mm:ss` format for readability.
+ */
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${hours}h ${minutes}m ${secs}s`;
+}
 
-    const templateName = args.join(" ");
-    const savedTemplate = await SavedGiveaway.findOne({
-      where: { name: templateName, guildId: message.guild!.id }
-    });
-
-    if (!savedTemplate) return message.reply(`❌ No template found with the name **${templateName}**.`);
-
-    const channel = message.channel as TextChannel;
-    const endsAt = Math.floor(Date.now() / 1000) + Math.floor(savedTemplate.duration / 1000);
-
-    // ✅ Determine if it's a Miniboss Giveaway based on the title
-    const isMiniboss = savedTemplate.title.toLowerCase().includes("miniboss") || savedTemplate.extraFields.includes("Miniboss");
-
-    // ✅ Create a new giveaway from the saved template
-    const giveawayData = await Giveaway.create({
-      host: message.author.id,
-      channelId: channel.id,
-      messageId: null,
-      title: savedTemplate.title,
-      description: savedTemplate.getDataValue('description') || "React to enter!",
-      role: savedTemplate.roleId || null,
-      duration: savedTemplate.duration,
-      endsAt,
-      participants: JSON.stringify([]),
-      winnerCount: savedTemplate.winnerCount,
-      extraFields: savedTemplate.extraFields
-    });
-
-    const embed = new EmbedBuilder()
-        .setTitle(savedTemplate.title)
-        .setDescription(savedTemplate.getDataValue('description') || "React to enter!")
-        .setColor(isMiniboss ? "DarkRed" : "Gold") // ✅ Ensures Miniboss giveaways are styled differently
-        .addFields(
-            { name: "⏳ Ends In", value: `${Math.floor(savedTemplate.duration / 1000)}s`, inline: true },
-            { name: "🏆 Winners", value: `${savedTemplate.winnerCount}`, inline: true },
-            { name: "🎟️ Total Participants", value: `0 users`, inline: true }
-        );
-
-    // ✅ Preserve any saved `--field` values and prevent duplicates
-    const extraFields = JSON.parse(savedTemplate.extraFields || "[]");
-    extraFields.forEach((field: { name: string, value: string }) => {
-      if (!embed.data.fields?.some(f => f.name === field.name)) {
-        embed.addFields(field);
-      }
-    });
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`join-${giveawayData.getDataValue('id')}`).setLabel(isMiniboss ? 'Join 🐲' : 'Join 🎉').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`leave-${giveawayData.getDataValue('id')}`).setLabel('Leave ❌').setStyle(ButtonStyle.Danger)
-    );
-
-    const giveawayMessage = await channel.send({
-      content: savedTemplate.roleId ? `<@&${savedTemplate.roleId}>` : "",
-      embeds: [embed],
-      components: [row],
-    });
-
-    // ✅ Store message ID
-    giveawayData.messageId = giveawayMessage.id;
-    await giveawayData.save();
-
-    // ✅ Start a live countdown
-    await startLiveCountdown(giveawayData.getDataValue('id'), client);
-    const ephemeralMessage = await channel.send(`✅ Giveaway started using template **${templateName}**, <@${message.author.id}>!`);
-    setTimeout(() => ephemeralMessage.delete().catch(console.error), 5000);
-
-  } catch (error) {
-    console.error("❌ Error starting template giveaway:", error);
+export async function execute(message: Message, args: string[]) {
+  if (args.length < 1) {
+    return message.reply("❌ You must specify a template name.");
   }
+
+  const templateName = args[0];
+
+  // ✅ Fetch saved giveaway template
+  const template = await SavedGiveaway.findOne({
+    where: { name: templateName, guildId: message.guild!.id },
+  });
+
+  if (!template) {
+    return message.reply(`❌ Template **${templateName}** not found.`);
+  }
+
+  // ✅ Ensure `extraFields` is always an object
+  const extraFields: Record<string, any> = template.extraFields ? JSON.parse(template.extraFields) : {};
+
+  // ✅ Convert duration properly
+  const formattedDuration = formatDuration(template.duration);
+
+  // ✅ Create giveaway embed
+  const embed = new EmbedBuilder()
+      .setTitle(template.title)
+      .setDescription(template.description)
+      .setColor("Gold")
+      .setFields([
+        { name: "🎟️ Total Participants", value: "0 users", inline: true },
+        { name: "🏆 Winners", value: `${template.winnerCount}`, inline: true },
+        { name: "⏳ Duration", value: formattedDuration, inline: true },
+        ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value: String(value), inline: true })), // ✅ Fix TS7053
+      ]);
+
+  // ✅ Ensure correct channel type
+  const textChannel = message.channel as TextChannel;
+  const giveawayMessage = await textChannel.send({ embeds: [embed] });
+
+  // ✅ Store giveaway details in DB
+  const giveaway = await Giveaway.create({
+    guildId: message.guild!.id,
+    host: message.author.id,
+    channelId: message.channel.id,
+    messageId: giveawayMessage.id,
+    title: template.title,
+    description: template.description,
+    role: template.role ?? undefined,  // ✅ Convert `null` to `undefined`
+    duration: template.duration,
+    winnerCount: template.winnerCount,
+    participants: JSON.stringify([]),
+    extraFields: template.extraFields ?? undefined,  // ✅ Convert `null` to `undefined`
+    endsAt: Math.floor(Date.now() / 1000) + template.duration,
+  });
+
+  // ✅ Update giveaway message with interactive buttons
+  await updateGiveawayEmbed(giveaway, message.client);
+
+  await message.reply(`✅ Giveaway **${templateName}** started!`);
 }

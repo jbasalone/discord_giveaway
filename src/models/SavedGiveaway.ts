@@ -1,50 +1,66 @@
-import { DataTypes, Model } from 'sequelize';
-import { sequelize } from '../database';
+import { DataTypes, Model } from "sequelize";
+import { sequelize } from "../database";
 
-export class SavedGiveaway extends Model {
-    declare id: number;
-    declare guildId: string;
-    declare hostId: string;
-    declare name: string;
-    declare title: string;
-    declare description: string;
-    declare duration: number;
-    declare winnerCount: number;
-    declare roleId: string;
-    declare extraFields: string;
+class SavedGiveaway extends Model {
+    public name!: string;
+    public title!: string;
+    public description!: string;
+    public role?: string;
+    public duration!: number;
+    public winnerCount!: number;
+    public extraFields?: string;
+    public createdAt!: Date;
+    public updatedAt!: Date;
 }
 
 SavedGiveaway.init(
     {
-        id: {
-            type: DataTypes.INTEGER,
-            autoIncrement: true,
-            primaryKey: true
+        name: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            primaryKey: true,  // ✅ Set `name` as the PRIMARY KEY (No `id` column needed)
         },
-        guildId: { type: DataTypes.STRING, allowNull: false },
-        hostId: { type: DataTypes.STRING, allowNull: false },
-        name: { type: DataTypes.STRING, allowNull: false },
-        title: { type: DataTypes.STRING, allowNull: false },
-        description: { type: DataTypes.STRING, allowNull: false, defaultValue: "React to enter!" },
-        duration: { type: DataTypes.INTEGER, allowNull: false },
-        winnerCount: { type: DataTypes.INTEGER, allowNull: false },
-        roleId: { type: DataTypes.STRING, allowNull: false },
-        extraFields: {
+        title: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+        description: {
             type: DataTypes.TEXT,
             allowNull: false,
-            defaultValue: "[]",
-            get() {
-                return JSON.parse(this.getDataValue("extraFields") || "[]");
-            },
-            set(value: string | object) {
-                this.setDataValue("extraFields", JSON.stringify(value));
-            }
-        }
+        },
+        role: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
+        duration: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+        },
+        winnerCount: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+        },
+        extraFields: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        createdAt: {
+            type: DataTypes.DATE,
+            allowNull: false,
+            defaultValue: DataTypes.NOW,
+        },
+        updatedAt: {
+            type: DataTypes.DATE,
+            allowNull: false,
+            defaultValue: DataTypes.NOW,
+        },
     },
     {
         sequelize,
-        modelName: 'SavedGiveaway',
-        tableName: 'saved_giveaways',
-        timestamps: false
+        modelName: "SavedGiveaway",
+        tableName: "saved_giveaways",
+        timestamps: true,  // ✅ Use timestamps (matches MySQL `createdAt` & `updatedAt`)
     }
 );
+
+export { SavedGiveaway };

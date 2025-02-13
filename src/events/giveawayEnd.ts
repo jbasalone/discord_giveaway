@@ -1,21 +1,26 @@
-import { Client, TextChannel, EmbedBuilder } from 'discord.js';
+import { Client, TextChannel, EmbedBuilder, Message } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { Op } from 'sequelize';
 
 export async function handleGiveawayEnd(client: Client) {
   try {
     const currentTime = Math.floor(Date.now() / 1000);
+    console.log(`🔍 Checking expired giveaways at timestamp ${currentTime}`);
+
     const expiredGiveaways = await Giveaway.findAll({
-      where: { endsAt: { [Op.lte]: currentTime } }
+      where: { endsAt: { [Op.lte]: currentTime } },
     });
 
-    if (expiredGiveaways.length === 0) return;
+    console.log(`✅ Found ${expiredGiveaways.length} expired giveaways.`);
+
+    if (expiredGiveaways.length === 0) {
+      console.log("✅ No expired giveaways to process.");
+      return;
+    }
 
     for (const giveaway of expiredGiveaways) {
-      console.log(`🏁 Ending Giveaway ID: ${giveaway.id}`);
-
-      if (!giveaway.guildId) {
-        console.warn(`⚠️ Giveaway ${giveaway.id} is missing guildId. Skipping.`);
+      if (!giveaway.guildId || !giveaway.channelId || !giveaway.messageId) {
+        console.warn(`⚠️ Skipping giveaway due to missing fields: ${JSON.stringify(giveaway, null, 2)}`);
         continue;
       }
 
@@ -27,40 +32,34 @@ export async function handleGiveawayEnd(client: Client) {
 
       const channel = guild.channels.cache.get(giveaway.channelId) as TextChannel;
       if (!channel) {
-        console.error(`❌ Giveaway ${giveaway.id} - Channel not found!`);
+        console.error(`❌ Channel not found for Giveaway ID ${giveaway.id}`);
         continue;
       }
 
-      let giveawayMessage;
-      if (!giveaway.messageId) {
-        console.warn(`⚠️ Giveaway messageId is missing for ID ${giveaway.id}.`);
-        continue;
-      }
-
+      let giveawayMessage: Message;
       try {
         giveawayMessage = await channel.messages.fetch(giveaway.messageId);
+        console.log(`✅ Successfully fetched giveaway message for ID ${giveaway.id}: ${giveaway.messageId}`);
       } catch (error) {
         console.warn(`⚠️ Giveaway message not found for ID ${giveaway.messageId}. Skipping update.`);
         continue;
       }
 
-      let participants: string[] = [];
-      try {
-        participants = JSON.parse(giveaway.participants);
-      } catch (error) {
-        console.error(`❌ Error parsing participants for Giveaway ${giveaway.id}:`, error);
-      }
+      let participants: string[] = JSON.parse(giveaway.participants || "[]");
+      let winners = participants.length >= giveaway.winnerCount
+          ? participants.slice(0, giveaway.winnerCount).map(id => `<@${id}>`).join(', ')
+          : "No winners.";
 
-      if (participants.length < giveaway.winnerCount) {
-        console.log(`❌ Not enough participants for Giveaway ID: ${giveaway.id}. No winners selected.`);
-        await giveaway.destroy();
-        continue;
-      }
+      // ✅ Update Embed
+      const embed = EmbedBuilder.from(giveawayMessage.embeds[0])
+          .setFields([
+            { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
+            { name: "🏆 Winners", value: winners, inline: true },
+            { name: "⏳ Status", value: "🛑 Ended!", inline: true }
+          ])
+          .setColor("Red");
 
-      const shuffledParticipants = participants.sort(() => Math.random() - 0.5);
-      const winners = shuffledParticipants.slice(0, giveaway.winnerCount).map(id => `<@${id}>`).join(', ');
-
-      await channel.send(`🎉 **Giveaway Ended!** **${giveaway.title}**\n🏆 **Winners:** ${winners}`);
+      await giveawayMessage.edit({ embeds: [embed] });
 
       await giveaway.destroy();
     }

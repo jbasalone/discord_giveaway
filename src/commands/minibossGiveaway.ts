@@ -1,87 +1,97 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel } from 'discord.js';
+import { Message, EmbedBuilder, TextChannel, PermissionsBitField } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
-import { convertToMilliseconds } from '../utils/convertTime';
 import { startLiveCountdown } from '../utils/giveawayTimer';
-import { client } from '../index';
+import { convertToMilliseconds } from '../utils/convertTime';
 
 export async function execute(message: Message, args: string[]) {
+    if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return message.reply("❌ You need `Administrator` permission to start a miniboss giveaway.");
+    }
+
+    if (args.length < 2) {
+        return message.reply("❌ Usage: `!ga miniboss <title> <duration>` - Starts a Miniboss Giveaway.");
+    }
+
+    const title = args.slice(0, args.length - 1).join(" ");
+    const durationArg = args[args.length - 1];
+
+    const duration = convertToMilliseconds(durationArg);
+    if (duration <= 0) {
+        return message.reply("❌ Invalid duration format. Example: `30s`, `5m`, `1h`.");
+    }
+
+    const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
+    const channel = message.channel as TextChannel;
+    const guildId = message.guild?.id;
+
+    if (!guildId) {
+        return message.reply("❌ Error: Unable to determine the server ID.");
+    }
+
+    // ✅ **Check for Duplicate Giveaway Titles**
+    let giveaway = await Giveaway.findOne({ where: { title } });
+    if (giveaway) {
+        return message.reply("⚠️ A giveaway with this title already exists. Please use a different title.");
+    }
+
+    // ✅ **Create Giveaway Embed**
+    const embed = new EmbedBuilder()
+        .setTitle(`🐲 **Miniboss Giveaway: ${title}** 🐲`)
+        .setDescription("React with 🐉 to enter!")
+        .setColor("DarkRed")
+        .addFields([
+            { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
+            { name: "🏆 Winners", value: "Auto-Claim (Miniboss Mode)", inline: true },
+            { name: "🎟️ Participants", value: "0 users", inline: true }
+        ]);
+
+    let giveawayMessage;
     try {
-        if (args.length < 2) return message.reply("❌ Invalid usage! Example: `!ga miniboss \"Boss Battle\" 10m --force --field \"Requirement: Level 50+\"`");
+        giveawayMessage = await channel.send({ embeds: [embed] });
+    } catch (error) {
+        console.error("❌ Failed to send miniboss giveaway message:", error);
+        return message.reply("❌ Could not start miniboss giveaway. Bot might lack permissions.");
+    }
 
-        const titleMatch = message.content.match(/"(.+?)"/);
-        const title = titleMatch ? titleMatch[1] : '🎉 Miniboss Giveaway 🎉';
+    const transaction = await Giveaway.sequelize?.transaction();
+    if (!transaction) {
+        console.error("❌ Unable to initialize database transaction.");
+        return message.reply("❌ Database error. Try again later.");
+    }
 
-        const durationArg = args.find(arg => arg.match(/\d+[smhd]/)) || '10m';
-        const forceStart = args.includes("--force");
-
-        const duration = convertToMilliseconds(durationArg);
-        if (duration <= 0) return message.reply("❌ Invalid duration!");
-
-        const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
-        const channel = message.channel as TextChannel;
-        const guildId = message.guild?.id;
-
-        if (!guildId) {
-            console.error("❌ Guild ID is missing.");
-            return message.reply("❌ Error: Unable to determine the server ID.");
-        }
-
-        // ✅ Extract `--field` arguments properly
-        const fieldRegex = /--field\s"(.+?):\s(.+?)"/g;
-        let extraFields: { name: string; value: string }[] = [];
-        let match;
-
-        while ((match = fieldRegex.exec(message.content)) !== null) {
-            const fieldName = match?.[1]?.trim() || `📌 Info`;
-            const fieldValue = match?.[2]?.trim() || "No description provided";
-
-            if (fieldName && fieldValue && !extraFields.some((field) => field.name === `📌 ${fieldName}`)) {
-                extraFields.push({ name: `📌 ${fieldName}`, value: fieldValue });
-            }
-        }
-
-        // ✅ Create and save giveaway in the database
-        const giveawayData = await Giveaway.create({
-            guildId, // ✅ Ensures guildId is always stored
+    let giveawayData;
+    try {
+        giveawayData = await Giveaway.create({
+            guildId,
             host: message.author.id,
             channelId: channel.id,
-            messageId: null,
+            messageId: giveawayMessage.id,
             title,
-            description: 'React with 🎉 to enter!',
-            role: null,
+            description: "React with 🐉 to enter!",
             duration,
             endsAt,
-            participants: JSON.stringify([]), // ✅ Initialize properly
-            winnerCount: 9,
-            extraFields: JSON.stringify(extraFields),
-            forceStart,
-        });
+            participants: JSON.stringify([]),
+            winnerCount: 1 // ✅ Ensure winner count is explicitly set
+        }, { transaction });
 
-        const embed = new EmbedBuilder()
-            .setTitle(title)
-            .setDescription("React with 🎉 to enter!")
-            .setColor("Gold")
-            .setFields([
-                ...extraFields,
-                { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-                { name: "🏆 Winners", value: "9", inline: true },
-                { name: "🎟️ Total Participants", value: "0 users", inline: true }
-            ]);
-
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId(`join-${giveawayData.id}`).setLabel('Join 🎉').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`leave-${giveawayData.id}`).setLabel('Leave ❌').setStyle(ButtonStyle.Danger)
-        );
-
-        const giveawayMessage = await channel.send({ embeds: [embed] });
-
-        giveawayData.messageId = giveawayMessage.id;
-        await giveawayData.save();
-
-        console.log(`✅ Miniboss Giveaway ${giveawayData.id} started!`);
-
-        startLiveCountdown(giveawayData.id, client);
+        await transaction.commit();
+        console.log(`✅ Miniboss Giveaway successfully saved with messageId: ${giveawayData.get("messageId")}`);
     } catch (error) {
-        console.error("❌ Error starting miniboss giveaway:", error);
+        await transaction.rollback();
+        console.error("❌ Error saving miniboss giveaway:", error);
+        return message.reply("❌ Failed to save the miniboss giveaway.");
     }
+
+    if (!giveawayData?.id) {
+        console.error("❌ Giveaway ID is undefined. Skipping countdown.");
+        return message.reply("❌ Giveaway ID is missing, please check logs.");
+    }
+
+    startLiveCountdown(giveawayData.id, message.client);
+
+    if (!giveawayMessage.url) {
+        return message.reply(`✅ Miniboss Giveaway **${title}** started! Check the channel for the giveaway message.`);
+    }
+
+    return message.reply(`✅ Miniboss Giveaway **${title}** started! React with 🐉 in [this message](${giveawayMessage.url}).`);
 }
