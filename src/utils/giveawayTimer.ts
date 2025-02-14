@@ -40,9 +40,17 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
         if (giveaway.get("endsAt") <= currentTime) {
             console.log(`✅ Giveaway ${giveawayId} has ended, processing winners.`);
             await handleGiveawayEnd(client);
-
-            // ✅ Stop countdown loop
             return;
+        }
+
+        // ✅ Fix `extraFields` Parsing & Ensure Values are Strings
+        const rawExtraFields = giveaway.get("extraFields") ?? "{}";
+        let extraFields;
+        try {
+            extraFields = JSON.parse(rawExtraFields);
+        } catch (error) {
+            console.error(`❌ Error parsing extraFields for Giveaway ${giveawayId}:`, error);
+            extraFields = {};
         }
 
         // ✅ **Update the embed if giveaway is still running**
@@ -50,7 +58,8 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
             .setFields([
                 { name: "🎟️ Total Participants", value: `${JSON.parse(giveaway.get("participants") || "[]").length} users`, inline: true },
                 { name: "🏆 Winners", value: `${giveaway.get("winnerCount") ?? "N/A"}`, inline: true },
-                { name: "⏳ Ends In", value: `<t:${giveaway.get("endsAt") ?? currentTime}:R>`, inline: true }
+                { name: "⏳ Ends In", value: `<t:${giveaway.get("endsAt") ?? currentTime}:R>`, inline: true },
+                ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value: String(value), inline: true }))
             ])
             .setColor("Gold");
 

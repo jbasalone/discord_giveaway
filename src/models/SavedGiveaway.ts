@@ -2,23 +2,32 @@ import { DataTypes, Model } from "sequelize";
 import { sequelize } from "../database";
 
 class SavedGiveaway extends Model {
+    public id!: number;
+    public guildId!: string;
     public name!: string;
     public title!: string;
     public description!: string;
-    public role?: string;
     public duration!: number;
     public winnerCount!: number;
     public extraFields?: string;
-    public createdAt!: Date;
-    public updatedAt!: Date;
+    public role?: string;
 }
 
 SavedGiveaway.init(
     {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        guildId: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
         name: {
             type: DataTypes.STRING,
             allowNull: false,
-            primaryKey: true,  // ✅ Set `name` as the PRIMARY KEY (No `id` column needed)
+            unique: true,  // Ensures template names are unique
         },
         title: {
             type: DataTypes.STRING,
@@ -27,10 +36,6 @@ SavedGiveaway.init(
         description: {
             type: DataTypes.TEXT,
             allowNull: false,
-        },
-        role: {
-            type: DataTypes.STRING,
-            allowNull: true,
         },
         duration: {
             type: DataTypes.INTEGER,
@@ -44,22 +49,16 @@ SavedGiveaway.init(
             type: DataTypes.TEXT,
             allowNull: true,
         },
-        createdAt: {
-            type: DataTypes.DATE,
-            allowNull: false,
-            defaultValue: DataTypes.NOW,
-        },
-        updatedAt: {
-            type: DataTypes.DATE,
-            allowNull: false,
-            defaultValue: DataTypes.NOW,
+        role: {
+            type: DataTypes.STRING,
+            allowNull: true,
         },
     },
     {
         sequelize,
         modelName: "SavedGiveaway",
         tableName: "saved_giveaways",
-        timestamps: true,  // ✅ Use timestamps (matches MySQL `createdAt` & `updatedAt`)
+        timestamps: true,
     }
 );
 

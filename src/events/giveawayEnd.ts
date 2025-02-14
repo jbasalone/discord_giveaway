@@ -45,12 +45,37 @@ export async function handleGiveawayEnd(client: Client) {
         continue;
       }
 
-      let participants: string[] = JSON.parse(giveaway.get("participants") || "[]");
+      // ✅ Ensure Participants are Retrieved & Parsed
+      let participants: string[] = [];
+      try {
+        participants = JSON.parse(giveaway.get("participants") ?? "[]");
+        if (!Array.isArray(participants)) participants = [];
+      } catch (error) {
+        console.error(`❌ Error parsing participants for Giveaway ${giveaway.get("id")}:`, error);
+        participants = [];
+      }
+
+      console.log(`🎟️ Total Participants for Giveaway ${giveaway.get("id")}: ${participants.length}`);
+
+      // ✅ Select Winners If Participants Are Sufficient
       let winners = "No winners.";
       if (participants.length >= giveaway.get("winnerCount")) {
-        // Shuffle and select winners
+        console.log(`🔹 Selecting ${giveaway.get("winnerCount")} winner(s) from ${participants.length} participants.`);
         const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5);
         winners = shuffledParticipants.slice(0, giveaway.get("winnerCount")).map(id => `<@${id}>`).join(', ');
+        console.log(`🏆 Winners selected for Giveaway ${giveaway.get("id")}: ${winners}`);
+      } else {
+        console.log(`❌ Not enough participants to select a winner.`);
+      }
+
+      // ✅ Fix `extraFields` Parsing & Ensure Values are Strings
+      const rawExtraFields = giveaway.get("extraFields") ?? "{}";
+      let extraFields;
+      try {
+        extraFields = JSON.parse(rawExtraFields);
+      } catch (error) {
+        console.error(`❌ Error parsing extraFields for Giveaway ${giveaway.get("id")}:`, error);
+        extraFields = {};
       }
 
       // ✅ Update Embed to Indicate Giveaway has Ended
@@ -58,7 +83,8 @@ export async function handleGiveawayEnd(client: Client) {
           .setFields([
             { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
             { name: "🏆 Winners", value: winners, inline: true },
-            { name: "⏳ Status", value: "🛑 Ended!", inline: true }
+            { name: "⏳ Status", value: "🛑 Ended!", inline: true },
+            ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value: String(value), inline: true }))
           ])
           .setColor("Red");
 

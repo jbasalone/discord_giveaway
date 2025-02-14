@@ -3,6 +3,7 @@ import { SavedGiveaway } from '../models/SavedGiveaway';
 
 export async function execute(message: Message) {
   try {
+    await SavedGiveaway.sync({ alter: true });
     const templates = await SavedGiveaway.findAll({
       where: { guildId: message.guild!.id },
       attributes: ['name', 'winnerCount', 'duration'], // ✅ Fetch only necessary fields
