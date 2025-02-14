@@ -60,7 +60,7 @@ Giveaway.init(
         messageId: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: true,
+            unique: false, // ✅ Fix: Removed extra unique constraint causing too many indexes
         },
         title: {
             type: DataTypes.STRING,
@@ -111,7 +111,7 @@ Giveaway.init(
     }
 );
 
-// ✅ **Force Sync the Model (FIXED)**
+// ✅ **Ensure Database is Properly Synced**
 async function syncGiveawayModel(): Promise<void> {
     try {
         console.log("🔄 Syncing Giveaway model...");
@@ -122,7 +122,7 @@ async function syncGiveawayModel(): Promise<void> {
     }
 }
 
-// ✅ **Properly Await Sync in App Entry**
+// ✅ **Ensure Sync is Awaited on Startup**
 (async () => {
     await syncGiveawayModel();
 })();

@@ -12,7 +12,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         return message.reply("❌ Usage: `!ga custom <title> <duration> <winners> --field \"name: value\"` - Starts a Custom Giveaway.");
     }
 
-    // ✅ **Fix Command Parsing to Handle Quoted Arguments Properly**
+    // ✅ **Fix Argument Parsing**
     const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
 
     let fieldArgs: string[] = [];

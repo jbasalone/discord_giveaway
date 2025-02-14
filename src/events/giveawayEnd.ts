@@ -78,7 +78,10 @@ export async function handleGiveawayEnd(client: Client) {
         extraFields = {};
       }
 
-      // ✅ Update Embed to Indicate Giveaway has Ended
+      // ✅ **Generate Giveaway Message Link**
+      const giveawayLink = `https://discord.com/channels/${giveaway.get("guildId")}/${giveaway.get("channelId")}/${giveaway.get("messageId")}`;
+
+      // ✅ **Update Embed to Indicate Giveaway has Ended**
       const embed = EmbedBuilder.from(giveawayMessage.embeds[0])
           .setFields([
             { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
@@ -90,14 +93,18 @@ export async function handleGiveawayEnd(client: Client) {
 
       await giveawayMessage.edit({ embeds: [embed] });
 
-      // ✅ Announce the winners
+      // ✅ **Announce the winners with the giveaway link**
       if (participants.length > 0) {
-        await channel.send(`🎉 **Giveaway Ended!** **${giveaway.get("title")}**\n🏆 **Winners:** ${winners}`);
+        await channel.send(
+            `🎉 **Giveaway Ended!** **${giveaway.get("title")}**\n🏆 **Winners:** ${winners}\n🔗 [View Giveaway](${giveawayLink})`
+        );
       } else {
-        await channel.send(`🎉 **Giveaway Ended!** **${giveaway.get("title")}**\n⚠️ No participants joined.`);
+        await channel.send(
+            `🎉 **Giveaway Ended!** **${giveaway.get("title")}**\n⚠️ No participants joined.\n🔗 [View Giveaway](${giveawayLink})`
+        );
       }
 
-      // ✅ Delete giveaway from database after processing
+      // ✅ **Delete giveaway from database after processing**
       await Giveaway.destroy({ where: { id: giveaway.get("id") } });
       console.log(`✅ Giveaway ${giveaway.get("id")} successfully deleted.`);
     }

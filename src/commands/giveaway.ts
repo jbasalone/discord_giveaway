@@ -4,26 +4,34 @@ import { convertToMilliseconds } from '../utils/convertTime';
 import { startLiveCountdown } from '../utils/giveawayTimer';
 import { client } from '../index';
 
-export async function execute(message: Message, args: string[]) {
+export async function execute(message: Message, rawArgs: string[]) {
     try {
-        if (args.length < 2) {
-            return message.reply("❌ Invalid usage! Example: `!ga create 30s 1`");
+        if (rawArgs.length < 3) {
+            return message.reply("❌ Invalid usage! Example: `!ga create \"Test Giveaway\" 30s 1`");
         }
 
-        const durationArg = args[0];
-        const winnerCountArg = args[1];
+        // ✅ **Fix: Proper Argument Parsing**
+        const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
+
+        if (args.length < 3) {
+            return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1`");
+        }
+
+        // ✅ Extract **Title**, **Duration**, and **Winner Count**
+        const title = args.slice(0, args.length - 2).join(" ");
+        const durationArg = args[args.length - 2];
+        const winnerCountArg = args[args.length - 1];
 
         const duration = convertToMilliseconds(durationArg);
         if (duration <= 0) {
-            return message.reply("❌ Invalid duration! Example: `!ga create 30s 1`");
+            return message.reply("❌ Invalid duration format! Example: `30s`, `5m`, `1h`.");
         }
 
         const winnerCount = parseInt(winnerCountArg, 10);
-        if (isNaN(winnerCount) || winnerCount < 1) {
-            return message.reply("❌ Invalid winner count!");
+        if (isNaN(winnerCount) || !Number.isInteger(winnerCount) || winnerCount < 1) {
+            return message.reply("❌ Winner count must be a **whole positive number** (e.g., `1`, `5`, `10`).");
         }
 
-        const title = "🎉 Giveaway 🎉";
         const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
         const channel = message.channel as TextChannel;
         const guildId = message.guild?.id;
@@ -33,9 +41,15 @@ export async function execute(message: Message, args: string[]) {
             return message.reply("❌ Error: Unable to determine the server ID.");
         }
 
-        // ✅ Create the giveaway embed
+        // ✅ Ensure No Duplicate Giveaway Titles
+        let existingGiveaway = await Giveaway.findOne({ where: { title, guildId } });
+        if (existingGiveaway) {
+            return message.reply("⚠️ A giveaway with this title **already exists**. Please choose a **different title**.");
+        }
+
+        // ✅ Create the Giveaway Embed
         const embed = new EmbedBuilder()
-            .setTitle(title)
+            .setTitle(`🎉 **${title}** 🎉`)
             .setDescription("React with 🎉 to enter!")
             .setColor("Gold")
             .setFields([
@@ -57,7 +71,7 @@ export async function execute(message: Message, args: string[]) {
             return message.reply("❌ Giveaway message failed to send.");
         }
 
-        // ✅ Add Join/Leave Buttons
+        // ✅ Create Join/Leave Buttons
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🎉").setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave ❌").setStyle(ButtonStyle.Danger)
@@ -109,7 +123,7 @@ export async function execute(message: Message, args: string[]) {
             return message.reply("✅ Giveaway started! Check the channel for the giveaway message.");
         }
 
-        return message.reply(`✅ Giveaway started! React with 🎉 in [this message](${giveawayMessage.url}).`);
+        return message.reply(`✅ Giveaway **"${title}"** started! React with 🎉 in [this message](${giveawayMessage.url}).`);
     } catch (error) {
         console.error("❌ Error starting giveaway:", error);
         return message.reply("❌ Failed to start the giveaway. Please check logs.");

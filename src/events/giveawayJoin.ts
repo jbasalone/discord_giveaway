@@ -1,8 +1,8 @@
-import { ButtonInteraction, TextChannel, EmbedBuilder, MessageFlags, InteractionReplyOptions } from 'discord.js';
+import { ButtonInteraction, TextChannel, EmbedBuilder, MessageFlags } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 
 const userCooldowns = new Map<string, number>();
-const cooldownTime = 10 * 1000; // 10 seconds cooldown between actions
+const cooldownTime = 10 * 1000; // 10 seconds cooldown
 
 export async function executeJoinLeave(interaction: ButtonInteraction) {
   try {
@@ -14,32 +14,25 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     console.log(`🔍 Looking up giveaway with messageId: ${giveawayMessageId}`);
 
-    // ✅ Fetch giveaway using Sequelize
+    // ✅ Fetch giveaway
     let giveaway = await Giveaway.findOne({ where: { messageId: giveawayMessageId } });
 
     if (!giveaway) {
       console.error(`❌ Giveaway not found for message ID: ${giveawayMessageId}`);
-      return await interaction.reply({ content: "❌ This giveaway has ended or is corrupted.", flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: "❌ This giveaway has ended or is corrupted.", ephemeral: true });
     }
 
     // ✅ Ensure the giveaway is not expired
     const currentTime = Math.floor(Date.now() / 1000);
     if (giveaway.get("endsAt") <= currentTime) {
-      return await interaction.reply({ content: "❌ This giveaway has already ended!", flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: "❌ This giveaway has already ended!", ephemeral: true });
     }
 
-    // ✅ Fetch Channel ID Properly
-    const channelId = giveaway.get("channelId") ?? null;
-    if (!channelId) {
-      console.error(`❌ Channel ID is missing for Giveaway ID: ${giveaway.get("id")}`);
-      return await interaction.reply({ content: "❌ Giveaway channel data is missing.", flags: MessageFlags.Ephemeral });
-    }
-
-    // ✅ Fetch the correct Discord channel
-    const channel = interaction.client.channels.cache.get(channelId) as TextChannel;
+    // ✅ Fetch channel
+    const channel = interaction.client.channels.cache.get(giveaway.get("channelId")) as TextChannel;
     if (!channel) {
-      console.error(`❌ Channel ID ${channelId} not found!`);
-      return await interaction.reply({ content: "❌ This giveaway channel no longer exists.", flags: MessageFlags.Ephemeral });
+      console.error(`❌ Channel not found for Giveaway ID: ${giveaway.get("id")}`);
+      return await interaction.reply({ content: "❌ Giveaway channel no longer exists.", ephemeral: true });
     }
 
     let giveawayMessage;
@@ -47,7 +40,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       giveawayMessage = await channel.messages.fetch(giveaway.get("messageId"));
     } catch (error) {
       console.warn(`⚠️ Giveaway message not found for ID ${giveawayMessageId}.`);
-      return await interaction.reply({ content: "❌ Giveaway message was deleted or is missing.", flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: "❌ Giveaway message was deleted or is missing.", ephemeral: true });
     }
 
     if (!giveawayMessage) {
@@ -55,7 +48,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       return;
     }
 
-    // ✅ Ensure participants are properly retrieved
+    // ✅ Fetch participants
     let participants: string[] = [];
     try {
       participants = JSON.parse(giveaway.get("participants") ?? "[]");
@@ -67,31 +60,31 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     const alreadyJoined = participants.includes(userId);
 
-    // ✅ Apply cooldown check
+    // ✅ Cooldown check
     if (userCooldowns.has(userId)) {
       const lastUsed = userCooldowns.get(userId)!;
       if (Date.now() - lastUsed < cooldownTime) {
-        return await interaction.reply({ content: "⚠️ Please wait before joining/leaving again!", flags: MessageFlags.Ephemeral });
+        return await interaction.reply({ content: "⚠️ Please wait before joining/leaving again!", ephemeral: true });
       }
     }
     userCooldowns.set(userId, Date.now());
 
     // ✅ Prevent duplicate joins and leaving non-existent entries
     if (isJoining && alreadyJoined) {
-      return await interaction.reply({ content: "⚠️ You have already joined this giveaway!", flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: "⚠️ You have already joined this giveaway!", ephemeral: true });
     }
     if (!isJoining && !alreadyJoined) {
-      return await interaction.reply({ content: "⚠️ You are not in this giveaway!", flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: "⚠️ You are not in this giveaway!", ephemeral: true });
     }
 
-    // ✅ Add or remove user from participants list
+    // ✅ Update participants list
     if (isJoining) {
       participants.push(userId);
     } else {
       participants = participants.filter(id => id !== userId);
     }
 
-    // ✅ Save updated participants list using Sequelize
+    // ✅ Update database
     await Giveaway.update(
         { participants: JSON.stringify(participants) },
         { where: { messageId: giveawayMessageId } }
@@ -109,7 +102,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       extraFields = {};
     }
 
-    // ✅ Preserve previous fields & update only necessary ones
+    // ✅ Preserve fields when updating the giveaway message
     const embed = EmbedBuilder.from(giveawayMessage.embeds[0])
         .setFields([
           { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
@@ -122,11 +115,11 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     return await interaction.reply({
       content: isJoining ? "✅ You have successfully joined the giveaway!" : "✅ You have left the giveaway.",
-      flags: MessageFlags.Ephemeral
+      ephemeral: true
     });
 
   } catch (error) {
     console.error("❌ Error handling giveaway join/leave:", error);
-    return await interaction.reply({ content: "❌ An error occurred. Please try again later.", flags: MessageFlags.Ephemeral });
+    return await interaction.reply({ content: "❌ An error occurred. Please try again later.", ephemeral: true });
   }
 }
