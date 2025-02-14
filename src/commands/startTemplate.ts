@@ -58,8 +58,6 @@ export async function execute(message: Message, args: string[]) {
       await startCustomGiveaway(message, argsToPass);
     }
 
-    return message.reply(`✅ Giveaway **"${giveawayName}"** (ID: ${templateId}) has started!`);
-
   } catch (error) {
     console.error("❌ Error starting giveaway from template:", error);
     return message.reply("❌ Failed to start the saved giveaway. Please check logs.");

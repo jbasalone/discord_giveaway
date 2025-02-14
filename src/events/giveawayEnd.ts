@@ -1,6 +1,8 @@
-import { Client, TextChannel, EmbedBuilder, Message } from 'discord.js';
+import { Client, TextChannel, EmbedBuilder, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { Op } from 'sequelize';
+import { GuildSettings } from '../models/GuildSettings';
+import { cache } from '../utils/giveawayCache';
 
 export async function handleGiveawayEnd(client: Client) {
   try {
@@ -19,6 +21,8 @@ export async function handleGiveawayEnd(client: Client) {
     }
 
     for (const giveaway of expiredGiveaways) {
+      const giveawayId = giveaway.get("id").toString();
+
       if (!giveaway.get("guildId") || !giveaway.get("channelId") || !giveaway.get("messageId")) {
         console.warn(`⚠️ Skipping giveaway due to missing fields: ${JSON.stringify(giveaway, null, 2)}`);
         continue;
@@ -26,22 +30,22 @@ export async function handleGiveawayEnd(client: Client) {
 
       const guild = client.guilds.cache.get(giveaway.get("guildId"));
       if (!guild) {
-        console.error(`❌ Guild not found for Giveaway ID ${giveaway.get("id")}`);
+        console.error(`❌ Guild not found for Giveaway ID ${giveawayId}`);
         continue;
       }
 
       const channel = guild.channels.cache.get(giveaway.get("channelId")) as TextChannel;
       if (!channel) {
-        console.error(`❌ Channel not found for Giveaway ID ${giveaway.get("id")}`);
+        console.error(`❌ Channel not found for Giveaway ID ${giveawayId}`);
         continue;
       }
 
       let giveawayMessage: Message;
       try {
         giveawayMessage = await channel.messages.fetch(giveaway.get("messageId"));
-        console.log(`✅ Successfully fetched giveaway message for ID ${giveaway.get("id")}: ${giveaway.get("messageId")}`);
+        console.log(`✅ Successfully fetched giveaway message for ID ${giveawayId}: ${giveaway.get("messageId")}`);
       } catch (error) {
-        console.warn(`⚠️ Giveaway message not found for ID ${giveaway.get("messageId")}. Skipping update.`);
+        console.warn(`⚠️ Giveaway message not found for ID ${giveawayId}. Skipping update.`);
         continue;
       }
 
@@ -51,29 +55,37 @@ export async function handleGiveawayEnd(client: Client) {
         participants = JSON.parse(giveaway.get("participants") ?? "[]");
         if (!Array.isArray(participants)) participants = [];
       } catch (error) {
-        console.error(`❌ Error parsing participants for Giveaway ${giveaway.get("id")}:`, error);
+        console.error(`❌ Error parsing participants for Giveaway ${giveawayId}:`, error);
         participants = [];
       }
 
-      console.log(`🎟️ Total Participants for Giveaway ${giveaway.get("id")}: ${participants.length}`);
+      console.log(`🎟️ Total Participants for Giveaway ${giveawayId}: ${participants.length}`);
 
       // ✅ Check for `--force` Mode
       const forceMode = giveaway.get("forceStart") ?? false;
 
       // ✅ Select Winners
       let winners = "No winners.";
+      let winnerList: string[] = [];
       if (participants.length >= 9 || forceMode) {
-        console.log(`🔹 Selecting winners for Giveaway ${giveaway.get("id")}`);
+        console.log(`🔹 Selecting winners for Giveaway ${giveawayId}`);
 
-        // ✅ **If `--force` is used and less than 9 joined, select ALL participants**
         const numWinners = forceMode ? participants.length : 9;
         const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5);
-        winners = shuffledParticipants.slice(0, numWinners).map(id => `<@${id}>`).join(', ');
+        winnerList = shuffledParticipants.slice(0, numWinners);
+        winners = winnerList.map(id => `<@${id}>`).join(', ');
 
-        console.log(`🏆 Winners selected for Giveaway ${giveaway.get("id")}: ${winners}`);
+        console.log(`🏆 Winners selected for Giveaway ${giveawayId}: ${winners}`);
       } else {
         console.log(`❌ Not enough participants to select a winner.`);
       }
+
+      // ✅ Store Winners in Cache BEFORE Deleting Giveaway
+      cache.set(giveawayId, {
+        participants: winnerList,
+        title: giveaway.get("title"),
+        forceStart: forceMode
+      });
 
       // ✅ Parse Extra Fields
       const rawExtraFields = giveaway.get("extraFields") ?? "{}";
@@ -81,12 +93,27 @@ export async function handleGiveawayEnd(client: Client) {
       try {
         extraFields = JSON.parse(rawExtraFields);
       } catch (error) {
-        console.error(`❌ Error parsing extraFields for Giveaway ${giveaway.get("id")}:`, error);
+        console.error(`❌ Error parsing extraFields for Giveaway ${giveawayId}:`, error);
         extraFields = {};
       }
 
       // ✅ **Generate Giveaway Message Link**
       const giveawayLink = `https://discord.com/channels/${giveaway.get("guildId")}/${giveaway.get("channelId")}/${giveaway.get("messageId")}`;
+
+      // ✅ **Generate Mobile and Desktop Commands**
+      const mobileCommand = `@epicRPG miniboss ${winnerList.map(id => `<@${id}>`).join(' ')}`;
+      const desktopCommand = `@epicRPG miniboss ${winnerList.join(' ')}`;
+
+      // ✅ **Fetch Miniboss Channel**
+      const guildSettings = await GuildSettings.findOne({ where: { guildId: giveaway.get("guildId") } });
+      const minibossChannelId = guildSettings?.get("minibossChannelId") ?? null;
+      const minibossChannel = minibossChannelId ? (guild.channels.cache.get(minibossChannelId) as TextChannel) : null;
+
+      // ✅ **Create Buttons for Command Selection**
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId(`miniboss-mobile-${giveawayId}`).setLabel("📱 Mobile Command").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`miniboss-desktop-${giveawayId}`).setLabel("💻 Desktop Command").setStyle(ButtonStyle.Primary)
+      );
 
       // ✅ **Update Embed to Indicate Giveaway has Ended**
       const embed = EmbedBuilder.from(giveawayMessage.embeds[0])
@@ -100,20 +127,18 @@ export async function handleGiveawayEnd(client: Client) {
 
       await giveawayMessage.edit({ embeds: [embed] });
 
-      // ✅ **Announce the winners with the giveaway link**
-      if (participants.length > 0) {
-        await channel.send(
-            `🎉 **Giveaway Ended!** **${giveaway.get("title")}**\n🏆 **Winners:** ${winners}\n🔗 [View Giveaway](${giveawayLink})`
-        );
-      } else {
-        await channel.send(
-            `🎉 **Giveaway Ended!** **${giveaway.get("title")}**\n⚠️ No participants joined.\n🔗 [View Giveaway](${giveawayLink})`
-        );
+      // ✅ **Send Buttons to the Miniboss Channel**
+      if (minibossChannel) {
+        await minibossChannel.send({
+          content: `🎉 **Miniboss Ended!** **${giveaway.get("title")}**\n🏆 **Winners:** ${winners}\n🔗 [View Giveaway](${giveawayLink})`,
+          components: [row]
+        });
       }
 
-      // ✅ **Delete giveaway from database after processing**
-      await Giveaway.destroy({ where: { id: giveaway.get("id") } });
-      console.log(`✅ Giveaway ${giveaway.get("id")} successfully deleted.`);
+      // ✅ **Delete giveaway from database**
+      await Giveaway.destroy({ where: { id: giveawayId } });
+
+      console.log(`✅ Giveaway ${giveawayId} successfully deleted.`);
     }
   } catch (error) {
     console.error("❌ Critical Error in `handleGiveawayEnd()`:", error);

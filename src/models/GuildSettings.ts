@@ -30,8 +30,9 @@ GuildSettings.init({
 }, {
     sequelize,
     modelName: 'GuildSettings',
-    tableName: 'guild_settings',
-    timestamps: false
+    tableName: 'guild_settings',  // ✅ Enforce correct table name
+    timestamps: false,
+    freezeTableName: true // ✅ Ensures Sequelize does NOT rename it
 });
 
 export { GuildSettings };

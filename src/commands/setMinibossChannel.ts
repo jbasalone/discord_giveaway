@@ -10,24 +10,27 @@ export async function execute(message: Message, args: string[]) {
         return message.reply("❌ You need **Administrator** permissions to set the Miniboss channel.");
     }
 
-    const channel = message.mentions.channels.first() as TextChannel;
-    if (!channel) {
-        return message.reply("❌ Please mention a **valid text channel**. Example: `!ga setminibosschannel #miniboss-events`");
+    // ✅ **Fix: Ensure Proper Channel Detection**
+    if (args.length < 1 || !message.mentions.channels.first()) {
+        return message.reply("❌ **Invalid command!** Example: `!ga setminibosschannel #miniboss-events`");
     }
 
-    try {
-        const existingSettings = await GuildSettings.findOne({ where: { guildId: message.guild.id } });
+    const channel = message.mentions.channels.first() as TextChannel;
+    const guildId = message.guild.id;
 
-        if (existingSettings) {
-            await existingSettings.update({ minibossChannelId: channel.id });
-        } else {
-            await GuildSettings.create({
-                guildId: message.guild.id,
-                minibossChannelId: channel.id
-            });
+    try {
+        // ✅ **Check if the GuildSettings entry exists**
+        const [settings, created] = await GuildSettings.findOrCreate({
+            where: { guildId },
+            defaults: { minibossChannelId: channel.id }
+        });
+
+        // ✅ **Update if it already exists**
+        if (!created) {
+            await settings.update({ minibossChannelId: channel.id });
         }
 
-        return message.reply(`✅ **Miniboss channel has been set to** <#${channel.id}>!`);
+        return message.reply(`✅ **Miniboss channel successfully set to** <#${channel.id}>!`);
     } catch (error) {
         console.error("❌ Error setting Miniboss channel:", error);
         return message.reply("❌ **An error occurred while setting the Miniboss channel.** Please try again.");

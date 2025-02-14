@@ -16,6 +16,7 @@ import { execute as executeGiveaway } from './commands/giveaway';
 import { execute as executeCustomGiveaway } from './commands/customGiveaway';
 import { execute as executeMinibossGiveaway } from './commands/minibossGiveaway';
 import { execute as executeSetMinibossChannel } from './commands/setMinibossChannel';
+import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
 dotenv.config();
@@ -121,7 +122,11 @@ async function startBot() {
         if (interaction.isStringSelectMenu() && interaction.customId === "help-menu") {
           await handleHelpSelection(interaction);
         } else if (interaction.isButton()) {
-          await executeJoinLeave(interaction);
+          if (interaction.customId.startsWith("miniboss-")) {
+            await handleMinibossCommand(interaction); // ✅ Handle Miniboss Command Selection
+          } else {
+            await executeJoinLeave(interaction);
+          }
         }
       } catch (error) {
         console.error('❌ Error handling interaction:', error);
