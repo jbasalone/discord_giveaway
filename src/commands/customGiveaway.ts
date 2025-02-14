@@ -1,28 +1,51 @@
-import { Message, EmbedBuilder, TextChannel, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel, PermissionsBitField } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
-import { startLiveCountdown } from '../utils/giveawayTimer';
+import { GuildSettings } from '../models/GuildSettings';
 import { convertToMilliseconds } from '../utils/convertTime';
+import { startLiveCountdown } from '../utils/giveawayTimer';
+import { client } from '../index';
 
 export async function execute(message: Message, rawArgs: string[]) {
-    if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply("❌ You need `Administrator` permission to start a custom giveaway.");
+    if (!message.guild) {
+        return message.reply("❌ This command must be used inside a server.");
     }
 
-    if (rawArgs.length < 3) {
-        return message.reply("❌ Usage: `!ga custom <title> <duration> <winners> --field \"name: value\"` - Starts a Custom Giveaway.");
+    // ✅ Fetch guild settings to check role permissions & mappings
+    const guildId = message.guild.id;
+    const guildSettings = await GuildSettings.findOne({ where: { guildId } });
+
+    if (!guildSettings) {
+        return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
     }
 
-    // ✅ **Fix Argument Parsing**
+    // ✅ Retrieve Allowed Roles (Who Can Start Giveaways)
+    let allowedRoles: string[] = [];
+    try {
+        allowedRoles = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
+    } catch {
+        allowedRoles = [];
+    }
+
+    // ✅ Ensure User Has Permission
+    if (allowedRoles.length > 0 && !message.member?.roles.cache.some(role => allowedRoles.includes(role.id))) {
+        return message.reply("❌ You do not have permission to start giveaways.");
+    }
+
+    // ✅ **Fix: Proper Argument Parsing (Handles `--role` correctly in any position)**
     const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
 
     let fieldArgs: string[] = [];
     let mainArgs: string[] = [];
+    let selectedRole: string | null = null;
 
-    // ✅ **Separate `--field` Arguments from Main Arguments**
+    // ✅ **Separate `--role` and `--field` Arguments**
     for (let i = 0; i < args.length; i++) {
-        if (args[i] === "--field" && args[i + 1]) {
+        if (args[i] === "--role" && args[i + 1]) {
+            selectedRole = args[i + 1];
+            i++; // Skip next argument (role name)
+        } else if (args[i] === "--field" && args[i + 1]) {
             fieldArgs.push(args[i + 1]);
-            i++; // Skip next argument as it's part of the field
+            i++; // Skip next argument (field value)
         } else {
             mainArgs.push(args[i]);
         }
@@ -30,7 +53,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     // ✅ **Ensure at least 3 required arguments exist (Title, Duration, Winner Count)**
     if (mainArgs.length < 3) {
-        return message.reply("❌ Invalid usage! Example: `!ga custom \"Super Giveaway\" 30s 1 --field \"Requirement: Level 50+\"`.");
+        return message.reply("❌ Invalid usage! Example: `!ga custom \"Super Giveaway\" 30s 1 --field \"Requirement: Level 50+\" --role VIPGiveaway`.");
     }
 
     // ✅ **Extract & Validate `winnerCount` and `duration`**
@@ -50,18 +73,29 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
     const channel = message.channel as TextChannel;
-    const guildId = message.guild?.id;
 
-    if (!guildId) {
-        return message.reply("❌ Error: Unable to determine the server ID.");
-    }
-
+    // ✅ Ensure No Duplicate Giveaway Titles
     let existingGiveaway = await Giveaway.findOne({ where: { title, guildId } });
     if (existingGiveaway) {
         return message.reply("⚠️ A giveaway with this title already exists. Please use a different title.");
     }
 
-    // ✅ **Fix Parsing of Extra Fields (Handles `:` in Field Values Properly)**
+    // ✅ Fetch Role Mappings from DB
+    let roleMappings: Record<string, string> = {};
+    try {
+        roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
+    } catch {
+        roleMappings = {};
+    }
+
+    // ✅ Resolve Role ID for Ping (From `--role` argument or mappings)
+    let rolePing = "";
+    if (selectedRole) {
+        const resolvedRole = roleMappings[selectedRole] || selectedRole;
+        rolePing = `<@&${resolvedRole}>`;
+    }
+
+    // ✅ **Fix Parsing of Extra Fields**
     let extraFields: Record<string, string> = {};
     for (let field of fieldArgs) {
         const splitIndex = field.indexOf(":");
@@ -74,7 +108,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     // ✅ **Create Giveaway Embed**
     const embed = new EmbedBuilder()
-        .setTitle(`🎁 **Custom Giveaway: ${title}** 🎁`)
+        .setTitle(`🎁 **${title}** `)
         .setDescription("React with 🎉 to enter!")
         .setColor("Blue")
         .addFields([
@@ -86,13 +120,15 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     let giveawayMessage;
     try {
-        giveawayMessage = await channel.send({ embeds: [embed] });
+        giveawayMessage = await channel.send({
+            content: rolePing ? `🎉 ${rolePing} A new giveaway has started!` : undefined,
+            embeds: [embed]
+        });
     } catch (error) {
         console.error("❌ Failed to send custom giveaway message:", error);
         return message.reply("❌ Could not start custom giveaway. Bot might lack permissions.");
     }
 
-    // ✅ **Ensure message ID is valid before creating buttons**
     if (!giveawayMessage.id) {
         console.error("❌ Giveaway message ID is missing.");
         return message.reply("❌ Could not start giveaway due to an internal error.");
@@ -116,6 +152,7 @@ export async function execute(message: Message, rawArgs: string[]) {
             messageId: giveawayMessage.id,
             title,
             description: "React with 🎉 to enter!",
+            type: "custom", // ✅ FIX: Ensure giveaway type is explicitly set
             duration,
             endsAt,
             participants: JSON.stringify([]),

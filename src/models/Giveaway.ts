@@ -1,5 +1,5 @@
-import { DataTypes, Model, Optional } from "sequelize";
-import { sequelize } from "../database";
+import { DataTypes, Model, Optional } from 'sequelize';
+import { sequelize } from '../database';
 
 interface GiveawayAttributes {
     id: number;
@@ -9,17 +9,16 @@ interface GiveawayAttributes {
     messageId: string;
     title: string;
     description: string;
-    role?: string | null;
+    type: 'custom' | 'miniboss' | 'giveaway'; // ✅ Add this line
     duration: number;
     endsAt: number;
     participants: string;
     winnerCount: number;
-    extraFields?: string | null;
+    extraFields?: string;
     forceStart?: boolean;
 }
 
-// ✅ Ensure the primary key is correct
-interface GiveawayCreationAttributes extends Optional<GiveawayAttributes, "id"> {}
+interface GiveawayCreationAttributes extends Optional<GiveawayAttributes, 'id'> {}
 
 class Giveaway extends Model<GiveawayAttributes, GiveawayCreationAttributes> implements GiveawayAttributes {
     public id!: number;
@@ -29,12 +28,12 @@ class Giveaway extends Model<GiveawayAttributes, GiveawayCreationAttributes> imp
     public messageId!: string;
     public title!: string;
     public description!: string;
-    public role?: string | null;
+    public type!: 'custom' | 'miniboss' | 'giveaway'; // ✅ Add this line
     public duration!: number;
     public endsAt!: number;
     public participants!: string;
     public winnerCount!: number;
-    public extraFields?: string | null;
+    public extraFields?: string;
     public forceStart?: boolean;
 }
 
@@ -55,25 +54,24 @@ Giveaway.init(
         },
         channelId: {
             type: DataTypes.STRING,
-            allowNull: false,  // ✅ Ensure channelId is NOT NULL
+            allowNull: false,
         },
         messageId: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: false, // ✅ Fix: Removed extra unique constraint causing too many indexes
         },
         title: {
             type: DataTypes.STRING,
             allowNull: false,
         },
         description: {
-            type: DataTypes.STRING,
+            type: DataTypes.TEXT,
             allowNull: false,
         },
-        role: {
-            type: DataTypes.STRING,
-            allowNull: true,
-            defaultValue: null,  // ✅ Fix NULL/Undefined issues
+        type: {
+            type: DataTypes.ENUM('custom', 'miniboss', 'giveaway'), // ✅ Ensure `type` is stored correctly in the DB
+            allowNull: false,
+            defaultValue: 'custom',
         },
         duration: {
             type: DataTypes.INTEGER,
@@ -86,45 +84,30 @@ Giveaway.init(
         participants: {
             type: DataTypes.TEXT,
             allowNull: false,
-            defaultValue: "[]", // ✅ Ensure empty array is default
+            defaultValue: '[]',
         },
         winnerCount: {
             type: DataTypes.INTEGER,
             allowNull: false,
+            defaultValue: 1,
         },
         extraFields: {
             type: DataTypes.TEXT,
             allowNull: true,
-            defaultValue: null,  // ✅ Fix NULL handling
         },
         forceStart: {
             type: DataTypes.BOOLEAN,
-            allowNull: false,
+            allowNull: true,
             defaultValue: false,
         },
     },
     {
         sequelize,
-        modelName: "Giveaway",
-        tableName: "Giveaways",  // ✅ Ensure correct table name
+        modelName: 'Giveaway',
+        tableName: 'giveaways',
         timestamps: false,
+        freezeTableName: true,
     }
 );
-
-// ✅ **Ensure Database is Properly Synced**
-async function syncGiveawayModel(): Promise<void> {
-    try {
-        console.log("🔄 Syncing Giveaway model...");
-        await Giveaway.sync({ alter: true });
-        console.log("✅ Giveaway model synced successfully!");
-    } catch (error) {
-        console.error("❌ Error syncing Giveaway model:", error);
-    }
-}
-
-// ✅ **Ensure Sync is Awaited on Startup**
-(async () => {
-    await syncGiveawayModel();
-})();
 
 export { Giveaway };

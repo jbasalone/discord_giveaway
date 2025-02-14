@@ -6,6 +6,8 @@ class GuildSettings extends Model {
     public defaultGiveawayRoleId!: string | null;
     public prefix!: string;
     public minibossChannelId!: string | null;
+    public allowedRoles!: string | null;  // ✅ New: JSON for roles that can start GAs
+    public roleMappings!: string | null;  // ✅ New: JSON for role pings
 }
 
 GuildSettings.init({
@@ -26,13 +28,23 @@ GuildSettings.init({
     minibossChannelId: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    allowedRoles: {
+        type: DataTypes.TEXT,  // ✅ JSON string of roles who can start GAs
+        allowNull: true,
+        defaultValue: "{}"
+    },
+    roleMappings: {
+        type: DataTypes.TEXT,  // ✅ JSON string of role mappings for pings
+        allowNull: true,
+        defaultValue: "{}"
     }
 }, {
     sequelize,
     modelName: 'GuildSettings',
-    tableName: 'guild_settings',  // ✅ Enforce correct table name
+    tableName: 'guild_settings',
     timestamps: false,
-    freezeTableName: true // ✅ Ensures Sequelize does NOT rename it
+    freezeTableName: true
 });
 
 export { GuildSettings };

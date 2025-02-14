@@ -75,13 +75,13 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     // ✅ Create Miniboss Giveaway Embed
     const embed = new EmbedBuilder()
-        .setTitle(`🐲 **Miniboss Giveaway: ${title}** 🐲`)
+        .setTitle(`🎊 **MB ${title}** 🎊`)
         .setDescription("React with 🐉 to enter!")
         .setColor("DarkRed")
         .setFields([
-            { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-            { name: "🏆 Required Participants", value: forceMode ? "⚡ **Instant Start Enabled**" : "9 Required", inline: true },
             { name: "🎟️ Current Participants", value: "0 users", inline: true },
+            { name: "🏆 Required Participants", value: forceMode ? "⚡ **Instant Start Enabled**" : "9 Required", inline: true },
+            { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
             ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value, inline: true }))
         ]);
 
@@ -118,13 +118,14 @@ export async function execute(message: Message, rawArgs: string[]) {
             channelId: channel.id,
             messageId: giveawayMessage.id,
             title,
-            description: "React with 🐉 to enter!",
+            description: "Clicky Join 🐉 to enter!",
             duration,
             endsAt,
             participants: JSON.stringify([]),
             winnerCount: requiredParticipants, // ✅ Ensures 9 or 1 based on `--force`
             extraFields: JSON.stringify(extraFields),
-            forceStart: forceMode
+            forceStart: forceMode,
+            type: "miniboss" // ✅ ✅ ✅ THIS FIX ENSURES `giveawayEnd` KNOWS IT'S A MINIBOSS ✅ ✅ ✅
         }, { transaction });
 
         await transaction.commit();

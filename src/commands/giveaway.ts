@@ -1,24 +1,57 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel } from 'discord.js';
+import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel, PermissionsBitField } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
+import { GuildSettings } from '../models/GuildSettings';
 import { convertToMilliseconds } from '../utils/convertTime';
 import { startLiveCountdown } from '../utils/giveawayTimer';
 import { client } from '../index';
 
 export async function execute(message: Message, rawArgs: string[]) {
     try {
-        if (rawArgs.length < 3) {
-            return message.reply("❌ Invalid usage! Example: `!ga create \"Test Giveaway\" 30s 1`");
+        if (!message.guild) {
+            return message.reply("❌ This command must be used inside a server.");
         }
 
-        // ✅ **Fix: Proper Argument Parsing**
+        // ✅ Fetch guild settings to check role permissions & mappings
+        const guildId = message.guild.id;
+        const guildSettings = await GuildSettings.findOne({ where: { guildId } });
+
+        if (!guildSettings) {
+            return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
+        }
+
+        // ✅ Retrieve Allowed Roles (Who Can Start Giveaways)
+        let allowedRoles: string[] = [];
+        try {
+            allowedRoles = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
+        } catch {
+            allowedRoles = [];
+        }
+
+        // ✅ Ensure User Has Permission
+        if (allowedRoles.length > 0 && !message.member?.roles.cache.some(role => allowedRoles.includes(role.id))) {
+            return message.reply("❌ You do not have permission to start giveaways.");
+        }
+
+        // ✅ **Fix: Proper Argument Parsing (Handles `--role` correctly)**
         const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
 
         if (args.length < 3) {
-            return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1`");
+            return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1 --role VIPGiveaway`");
         }
 
         // ✅ Extract **Title**, **Duration**, and **Winner Count**
-        const title = args.slice(0, args.length - 2).join(" ");
+        let titleArgs = [];
+        let roleArgIndex = args.findIndex(arg => arg.toLowerCase() === "--role");
+        let selectedRole: string | null = null;
+
+        if (roleArgIndex !== -1) {
+            selectedRole = args[roleArgIndex + 1] ?? null;
+            if (selectedRole) {
+                args.splice(roleArgIndex, 2); // Remove `--role` and role argument
+            }
+        }
+
+        titleArgs = args.slice(0, args.length - 2);
         const durationArg = args[args.length - 2];
         const winnerCountArg = args[args.length - 1];
 
@@ -34,22 +67,31 @@ export async function execute(message: Message, rawArgs: string[]) {
 
         const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
         const channel = message.channel as TextChannel;
-        const guildId = message.guild?.id;
-
-        if (!guildId) {
-            console.error("❌ Guild ID is missing.");
-            return message.reply("❌ Error: Unable to determine the server ID.");
-        }
 
         // ✅ Ensure No Duplicate Giveaway Titles
-        let existingGiveaway = await Giveaway.findOne({ where: { title, guildId } });
+        let existingGiveaway = await Giveaway.findOne({ where: { title: titleArgs.join(" "), guildId } });
         if (existingGiveaway) {
             return message.reply("⚠️ A giveaway with this title **already exists**. Please choose a **different title**.");
         }
 
+        // ✅ Fetch Role Mappings from DB
+        let roleMappings: Record<string, string> = {};
+        try {
+            roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
+        } catch {
+            roleMappings = {};
+        }
+
+        // ✅ Resolve Role ID for Ping (From `--role` argument or mappings)
+        let rolePing = "";
+        if (selectedRole) {
+            const resolvedRole = roleMappings[selectedRole] || selectedRole;
+            rolePing = `<@&${resolvedRole}>`;
+        }
+
         // ✅ Create the Giveaway Embed
         const embed = new EmbedBuilder()
-            .setTitle(`🎉 **${title}** 🎉`)
+            .setTitle(`🎉 **${titleArgs.join(" ")}** 🎉`)
             .setDescription("React with 🎉 to enter!")
             .setColor("Gold")
             .setFields([
@@ -60,7 +102,10 @@ export async function execute(message: Message, rawArgs: string[]) {
 
         let giveawayMessage;
         try {
-            giveawayMessage = await channel.send({ embeds: [embed] });
+            giveawayMessage = await channel.send({
+                content: rolePing ? `🎉 ${rolePing} A new giveaway has started!` : undefined,
+                embeds: [embed]
+            });
         } catch (error) {
             console.error("❌ Failed to send giveaway message:", error);
             return message.reply("❌ Could not start giveaway. Bot might lack permissions.");
@@ -93,8 +138,9 @@ export async function execute(message: Message, rawArgs: string[]) {
                 host: message.author.id,
                 channelId: channel.id,
                 messageId: giveawayMessage.id,
-                title,
+                title: titleArgs.join(" "),
                 description: "React with 🎉 to enter!",
+                type: "giveaway", // ✅ FIX: Ensure giveaway type is explicitly set
                 duration,
                 endsAt,
                 participants: JSON.stringify([]),
@@ -109,21 +155,9 @@ export async function execute(message: Message, rawArgs: string[]) {
             return message.reply("❌ Failed to save the giveaway.");
         }
 
-        // ✅ Fix: Ensure giveawayData.id exists before calling countdown
-        if (!giveawayData?.id) {
-            console.error("❌ Giveaway ID is undefined. Skipping countdown.");
-            return message.reply("❌ Giveaway ID is missing, please check logs.");
-        }
-
         startLiveCountdown(giveawayData.id, client);
 
-        // ✅ Fix: Ensure giveawayMessage.url exists before replying
-        if (!giveawayMessage.url) {
-            console.warn("⚠️ Giveaway message URL is missing.");
-            return message.reply("✅ Giveaway started! Check the channel for the giveaway message.");
-        }
-
-        return message.reply(`✅ Giveaway **"${title}"** started! React with 🎉 in [this message](${giveawayMessage.url}).`);
+        return message.reply(`✅ Giveaway **"${titleArgs.join(" ")}"** started! React with 🎉 in [this message](${giveawayMessage.url}).`);
     } catch (error) {
         console.error("❌ Error starting giveaway:", error);
         return message.reply("❌ Failed to start the giveaway. Please check logs.");

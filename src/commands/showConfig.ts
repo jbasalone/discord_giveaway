@@ -16,7 +16,6 @@ export async function execute(message: Message, guildId?: string) {
   guildId = guildId || message.guild.id;
 
   try {
-    // ✅ Fetch all necessary settings
     const prefix = await getGuildPrefix(guildId);
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
@@ -24,26 +23,34 @@ export async function execute(message: Message, guildId?: string) {
       return message.reply("❌ No settings found for this server.");
     }
 
-    // ✅ Always use `.get()` to retrieve values
+    // ✅ Retrieve Values Safely
     const defaultRoleId = guildSettings.get("defaultGiveawayRoleId") ?? null;
     const defaultRoleMention = defaultRoleId ? `<@&${defaultRoleId}>` : "❌ Not Set";
 
-    // ✅ Fix: Ensure Miniboss Channel ID is retrieved correctly
     const minibossChannelId = guildSettings.get("minibossChannelId") ?? null;
     const minibossChannelMention = minibossChannelId ? `<#${minibossChannelId}>` : "❌ Not Set";
 
-    // ✅ Fetch extra entry roles
-    const extraEntries = await ExtraEntries.findAll({ where: { guildId } });
-    const extraEntriesText = extraEntries.length > 0
-        ? extraEntries.map(entry => `<@&${entry.get("roleId")}> ➝ **+${entry.get("bonusEntries")} entries**`).join("\n")
-        : "❌ No extra entry roles set.";
+    // ✅ Fetch Allowed Roles (Who Can Start Giveaways)
+    let allowedRoles: string[] = [];
+    try {
+      allowedRoles = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
+    } catch {
+      allowedRoles = [];
+    }
+    const allowedRolesText = allowedRoles.length > 0
+        ? allowedRoles.map(roleId => `<@&${roleId}>`).join("\n")
+        : "❌ No restrictions set.";
 
-    // ✅ Allowed Giveaway Channels (Ensure correct structure)
-    const allowedGuilds: Record<string, string[]> = config.allowedGuilds;
-    const allowedChannels = allowedGuilds[guildId] ?? [];
-    const allowedChannelsText = allowedChannels.length > 0
-        ? allowedChannels.map(channelId => `<#${channelId}>`).join("\n")
-        : "❌ No restricted giveaway channels.";
+    // ✅ Fetch Role Mappings (Roles to Ping When GA Starts)
+    let roleMappings: Record<string, string> = {};
+    try {
+      roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
+    } catch {
+      roleMappings = {};
+    }
+    const roleMappingsText = Object.keys(roleMappings).length > 0
+        ? Object.entries(roleMappings).map(([roleName, roleId]) => `**${roleName}**: <@&${roleId}>`).join("\n")
+        : "❌ No ping roles set.";
 
     // ✅ Create Embed
     const embed = new EmbedBuilder()
@@ -53,13 +60,14 @@ export async function execute(message: Message, guildId?: string) {
         .addFields(
             { name: "🛠 Prefix", value: `\`${prefix}\``, inline: true },
             { name: "🎭 Default Giveaway Role", value: defaultRoleMention, inline: true },
-            { name: "📌 Miniboss Channel", value: minibossChannelMention, inline: true }, // ✅ Now retrieves correctly
-            { name: "➕ Extra Entry Roles", value: extraEntriesText, inline: false },
-            { name: "📢 Allowed Giveaway Channels", value: allowedChannelsText, inline: false }
+            { name: "📌 Miniboss Channel", value: minibossChannelMention, inline: true },
+            { name: "🔐 Allowed Roles (Who Can Start Giveaways)", value: allowedRolesText, inline: false },
+            { name: "📣 Giveaway Ping Roles", value: roleMappingsText, inline: false }
         )
         .setFooter({ text: "Only server admins can modify these settings." });
 
     await message.reply({ embeds: [embed] });
+
   } catch (error) {
     console.error("❌ Error fetching guild configuration:", error);
     return message.reply("❌ **Failed to retrieve guild configuration.** Please try again.");

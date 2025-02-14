@@ -42,8 +42,8 @@ export async function handleHelpSelection(interaction: Interaction) {
             ],
             "template": [
                 { name: "`!ga save --type <custom|miniboss> <name> <duration> [winners]`", value: "💾 Saves a giveaway as a **template**." },
-                { name: "`!ga starttemplate <ID>`", value: "🚀 Starts a giveaway from a saved template." },
-                { name: "`!ga listtemplates`", value: "📜 Lists all **saved giveaway templates**." },
+                { name: "`!ga start <ID>`", value: "🚀 Starts a giveaway from a saved template." },
+                { name: "`!ga listtemplate`", value: "📜 Lists all **saved giveaway templates**." },
                 { name: "`!ga deletetemplate <ID>`", value: "❌ Deletes a saved template **by ID**." },
                 { name: "`!ga edit <ID> --title \"New Title\"`", value: "✏️ Edits the **title** of a saved template." },
                 { name: "`!ga edit <ID> --duration 5m`", value: "⏳ Updates the **duration** of a template." },

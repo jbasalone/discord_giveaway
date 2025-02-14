@@ -5,6 +5,7 @@ import { handleGiveawayEnd } from './events/giveawayEnd';
 import { getGuildPrefix } from './utils/getGuildPrefix';
 
 import { execute as executeStartTemplate } from './commands/startTemplate';
+import { execute as executeSetRole } from './commands/setRole';
 import { execute as executeSaveTemplate } from './commands/saveTemplate';
 import { execute as executeListTemplates } from './commands/listTemplates';
 import { execute as executeDeleteTemplate } from './commands/deleteTemplate';
@@ -69,6 +70,7 @@ async function startBot() {
       try {
         switch (command) {
           case 'create':
+          case 'quick':
             await executeGiveaway(message, args);
             break;
           case 'custom':
@@ -79,6 +81,7 @@ async function startBot() {
             await executeMinibossGiveaway(message, args);
             break;
           case 'setextraentry':
+          case 'setentry':
             await executeSetExtraEntries(message, args, guildId);
             break;
           case 'setminibosschannel':
@@ -89,9 +92,12 @@ async function startBot() {
             await executeSaveTemplate(message, args);
             break;
           case 'starttemplate':
+          case 'start':
             await executeStartTemplate(message, args);
             break;
           case 'listtemplates':
+          case 'listtemp':
+          case 'listtemplate':
             await executeListTemplates(message);
             break;
           case 'deletetemplate':
@@ -105,6 +111,10 @@ async function startBot() {
             break;
           case 'help':
             await executeHelp(message);
+            break;
+          case 'setrole':
+          case 'setroles':
+            await executeSetRole(message, args)
             break;
           default:
             await message.reply(`❌ Unknown command. Use \`${prefix} ga help\` to see available commands.`);

@@ -1,4 +1,4 @@
-import { Client, TextChannel, EmbedBuilder, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Client, TextChannel, EmbedBuilder, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, GuildMember, PermissionFlagsBits } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { Op } from 'sequelize';
 import { GuildSettings } from '../models/GuildSettings';
@@ -22,6 +22,7 @@ export async function handleGiveawayEnd(client: Client) {
 
     for (const giveaway of expiredGiveaways) {
       const giveawayId = giveaway.get("id").toString();
+      const giveawayType = giveaway.get("type") ?? "custom"; // ✅ Default to "custom" if missing
 
       if (!giveaway.get("guildId") || !giveaway.get("channelId") || !giveaway.get("messageId")) {
         console.warn(`⚠️ Skipping giveaway due to missing fields: ${JSON.stringify(giveaway, null, 2)}`);
@@ -63,16 +64,27 @@ export async function handleGiveawayEnd(client: Client) {
 
       // ✅ Check for `--force` Mode
       const forceMode = giveaway.get("forceStart") ?? false;
+      const totalParticipants = participants.length;
+
+      // ✅ Determine Number of Winners
+      let winnerCount = 1; // Default
+
+      if (giveawayType === "miniboss") {
+        winnerCount = forceMode && totalParticipants < 9 ? totalParticipants : 9;
+      } else {
+        winnerCount = giveaway.get("winnerCount") ?? 1; // ✅ Use user-defined count or default to 1
+      }
 
       // ✅ Select Winners
       let winners = "No winners.";
       let winnerList: string[] = [];
-      if (participants.length >= 9 || forceMode) {
-        console.log(`🔹 Selecting winners for Giveaway ${giveawayId}`);
 
-        const numWinners = forceMode ? participants.length : 9;
+      if (totalParticipants > 0) {
+        console.log(`🔹 Selecting ${winnerCount} winners for Giveaway ${giveawayId}`);
+
+        // Shuffle and select winners
         const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5);
-        winnerList = shuffledParticipants.slice(0, numWinners);
+        winnerList = shuffledParticipants.slice(0, winnerCount);
         winners = winnerList.map(id => `<@${id}>`).join(', ');
 
         console.log(`🏆 Winners selected for Giveaway ${giveawayId}: ${winners}`);
@@ -100,16 +112,32 @@ export async function handleGiveawayEnd(client: Client) {
       // ✅ **Generate Giveaway Message Link**
       const giveawayLink = `https://discord.com/channels/${giveaway.get("guildId")}/${giveaway.get("channelId")}/${giveaway.get("messageId")}`;
 
-      // ✅ **Generate Mobile and Desktop Commands**
-      const mobileCommand = `@epicRPG miniboss ${winnerList.map(id => `<@${id}>`).join(' ')}`;
-      const desktopCommand = `@epicRPG miniboss ${winnerList.join(' ')}`;
-
       // ✅ **Fetch Miniboss Channel**
       const guildSettings = await GuildSettings.findOne({ where: { guildId: giveaway.get("guildId") } });
       const minibossChannelId = guildSettings?.get("minibossChannelId") ?? null;
       const minibossChannel = minibossChannelId ? (guild.channels.cache.get(minibossChannelId) as TextChannel) : null;
 
-      // ✅ **Create Buttons for Command Selection**
+      // ✅ **Grant Miniboss Channel Access to Winners**
+      if (giveawayType === "miniboss" && minibossChannel) {
+        for (const winnerId of winnerList) {
+          try {
+            const member = await guild.members.fetch(winnerId);
+            await minibossChannel.permissionOverwrites.create(member, {
+              ViewChannel: true,
+              SendMessages: true
+            });
+            console.log(`✅ Granted Miniboss Channel Access to ${winnerId}`);
+          } catch (error) {
+            console.error(`❌ Error granting access to ${winnerId}:`, error);
+          }
+        }
+      }
+
+      // ✅ **Generate Mobile and Desktop Commands for Miniboss**
+      const mobileCommand = `@epicRPG miniboss ${winnerList.map(id => `<@${id}>`).join(' ')}`;
+      const desktopCommand = `@epicRPG miniboss ${winnerList.join(' ')}`;
+
+      // ✅ **Create Buttons for Miniboss Command Selection**
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder().setCustomId(`miniboss-mobile-${giveawayId}`).setLabel("📱 Mobile Command").setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`miniboss-desktop-${giveawayId}`).setLabel("💻 Desktop Command").setStyle(ButtonStyle.Primary)
@@ -127,11 +155,15 @@ export async function handleGiveawayEnd(client: Client) {
 
       await giveawayMessage.edit({ embeds: [embed] });
 
-      // ✅ **Send Buttons to the Miniboss Channel**
-      if (minibossChannel) {
+      // ✅ **Send Winner Announcement**
+      if (giveawayType === "miniboss" && minibossChannel) {
         await minibossChannel.send({
           content: `🎉 **Miniboss Ended!** **${giveaway.get("title")}**\n🏆 **Winners:** ${winners}\n🔗 [View Giveaway](${giveawayLink})`,
           components: [row]
+        });
+      } else {
+        await channel.send({
+          content: `🎉 **Giveaway Ended!** **${giveaway.get("title")}**\n🏆 **Winners:** ${winners}\n🔗 [View Giveaway](${giveawayLink})`
         });
       }
 
