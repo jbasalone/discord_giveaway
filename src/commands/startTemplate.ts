@@ -1,74 +1,67 @@
-import { Message, EmbedBuilder, TextChannel } from 'discord.js';
+import { Message, PermissionsBitField } from 'discord.js';
 import { SavedGiveaway } from '../models/SavedGiveaway';
-import { Giveaway } from '../models/Giveaway';
-import { updateGiveawayEmbed } from '../utils/updateGiveawayEmbed';
-
-/**
- * Converts seconds into `hh:mm:ss` format for readability.
- */
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  return `${hours}h ${minutes}m ${secs}s`;
-}
+import { execute as startCustomGiveaway } from '../commands/customGiveaway';
+import { execute as startMinibossGiveaway } from '../commands/minibossGiveaway';
 
 export async function execute(message: Message, args: string[]) {
+  if (!message.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+    return message.reply("❌ You need `Manage Messages` permission to start a saved giveaway.");
+  }
+
   if (args.length < 1) {
-    return message.reply("❌ You must specify a template name.");
+    return message.reply("❌ You must specify a template **ID number**.");
   }
 
-  const templateName = args[0];
-
-  // ✅ Fetch saved giveaway template
-  const template = await SavedGiveaway.findOne({
-    where: { name: templateName, guildId: message.guild!.id },
-  });
-
-  if (!template) {
-    return message.reply(`❌ Template **${templateName}** not found.`);
+  const templateId = parseInt(args[0], 10);
+  if (isNaN(templateId)) {
+    return message.reply("❌ Invalid ID. Please enter a **valid template ID number**.");
   }
 
-  // ✅ Ensure `extraFields` is always an object
-  const extraFields: Record<string, any> = template.extraFields ? JSON.parse(template.extraFields) : {};
+  try {
+    // ✅ Fetch saved giveaway template by ID
+    const template = await SavedGiveaway.findByPk(templateId);
 
-  // ✅ Convert duration properly
-  const formattedDuration = formatDuration(template.duration);
+    if (!template) {
+      return message.reply(`❌ No saved giveaway template found with ID **${templateId}**.`);
+    }
 
-  // ✅ Create giveaway embed
-  const embed = new EmbedBuilder()
-      .setTitle(template.title)
-      .setDescription(template.description)
-      .setColor("Gold")
-      .setFields([
-        { name: "🎟️ Total Participants", value: "0 users", inline: true },
-        { name: "🏆 Winners", value: `${template.winnerCount}`, inline: true },
-        { name: "⏳ Duration", value: formattedDuration, inline: true },
-        ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value: String(value), inline: true })), // ✅ Fix TS7053
-      ]);
+    // ✅ Extract key values from template
+    const giveawayName = template.get("name") as string;
+    const duration = template.get("duration");
+    const winnerCount = template.get("winnerCount");
+    const forceStart = template.get("forceStart") ?? false;
+    const giveawayType = template.get("type") ?? "custom"; // Defaults to "custom"
+    const isMiniboss = giveawayType === "miniboss";
 
-  // ✅ Ensure correct channel type
-  const textChannel = message.channel as TextChannel;
-  const giveawayMessage = await textChannel.send({ embeds: [embed] });
+    // ✅ Ensure `extraFields` is always an object
+    let extraFields: Record<string, string> = {};
+    try {
+      extraFields = template.get("extraFields") ? JSON.parse(template.get("extraFields") as string) : {};
+    } catch (error) {
+      console.error(`❌ Error parsing extraFields for ${giveawayName}:`, error);
+    }
 
-  // ✅ Store giveaway details in DB
-  const giveaway = await Giveaway.create({
-    guildId: message.guild!.id,
-    host: message.author.id,
-    channelId: message.channel.id,
-    messageId: giveawayMessage.id,
-    title: template.title,
-    description: template.description,
-    role: template.role ?? undefined,  // ✅ Convert `null` to `undefined`
-    duration: template.duration,
-    winnerCount: template.winnerCount,
-    participants: JSON.stringify([]),
-    extraFields: template.extraFields ?? undefined,  // ✅ Convert `null` to `undefined`
-    endsAt: Math.floor(Date.now() / 1000) + template.duration,
-  });
+    // ✅ Construct argument array correctly
+    const argsToPass = [
+      `"${giveawayName}"`, // Properly format title
+      `${duration}`, // Giveaway Duration
+      ...(isMiniboss ? (forceStart ? ["--force"] : []) : [`${winnerCount}`]), // Force or Winner Count
+      ...Object.entries(extraFields).flatMap(([key, value]) => ["--field", `"${key}: ${value}"`]) // Proper field formatting
+    ];
 
-  // ✅ Update giveaway message with interactive buttons
-  await updateGiveawayEmbed(giveaway, message.client);
+    // ✅ Determine correct giveaway function to execute
+    if (isMiniboss) {
+      console.log(`🚀 Starting Miniboss Giveaway: ${giveawayName}`);
+      await startMinibossGiveaway(message, argsToPass);
+    } else {
+      console.log(`🚀 Starting Custom Giveaway: ${giveawayName}`);
+      await startCustomGiveaway(message, argsToPass);
+    }
 
-  await message.reply(`✅ Giveaway **${templateName}** started!`);
+    return message.reply(`✅ Giveaway **"${giveawayName}"** (ID: ${templateId}) has started!`);
+
+  } catch (error) {
+    console.error("❌ Error starting giveaway from template:", error);
+    return message.reply("❌ Failed to start the saved giveaway. Please check logs.");
+  }
 }
