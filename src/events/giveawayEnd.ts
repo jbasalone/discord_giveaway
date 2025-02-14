@@ -45,7 +45,7 @@ export async function handleGiveawayEnd(client: Client) {
         continue;
       }
 
-      // ✅ Ensure Participants are Retrieved & Parsed
+      // ✅ Retrieve and Parse Participants
       let participants: string[] = [];
       try {
         participants = JSON.parse(giveaway.get("participants") ?? "[]");
@@ -57,18 +57,25 @@ export async function handleGiveawayEnd(client: Client) {
 
       console.log(`🎟️ Total Participants for Giveaway ${giveaway.get("id")}: ${participants.length}`);
 
-      // ✅ Select Winners If Participants Are Sufficient
+      // ✅ Check for `--force` Mode
+      const forceMode = giveaway.get("forceStart") ?? false;
+
+      // ✅ Select Winners
       let winners = "No winners.";
-      if (participants.length >= giveaway.get("winnerCount")) {
-        console.log(`🔹 Selecting ${giveaway.get("winnerCount")} winner(s) from ${participants.length} participants.`);
+      if (participants.length >= 9 || forceMode) {
+        console.log(`🔹 Selecting winners for Giveaway ${giveaway.get("id")}`);
+
+        // ✅ **If `--force` is used and less than 9 joined, select ALL participants**
+        const numWinners = forceMode ? participants.length : 9;
         const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5);
-        winners = shuffledParticipants.slice(0, giveaway.get("winnerCount")).map(id => `<@${id}>`).join(', ');
+        winners = shuffledParticipants.slice(0, numWinners).map(id => `<@${id}>`).join(', ');
+
         console.log(`🏆 Winners selected for Giveaway ${giveaway.get("id")}: ${winners}`);
       } else {
         console.log(`❌ Not enough participants to select a winner.`);
       }
 
-      // ✅ Fix `extraFields` Parsing & Ensure Values are Strings
+      // ✅ Parse Extra Fields
       const rawExtraFields = giveaway.get("extraFields") ?? "{}";
       let extraFields;
       try {
