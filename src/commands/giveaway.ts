@@ -1,4 +1,12 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel, PermissionsBitField } from 'discord.js';
+import {
+    Message,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    TextChannel,
+    PermissionsBitField
+} from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { GuildSettings } from '../models/GuildSettings';
 import { convertToMilliseconds } from '../utils/convertTime';
@@ -40,6 +48,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         let titleArgs: string[] = [];
         let durationArg: string | null = null;
         let winnerCount: number | null = null;
+        let useExtraEntries = false; // ✅ Default to false unless specified
 
         // ✅ **Iterate through arguments safely**
         let i = 0;
@@ -51,6 +60,9 @@ export async function execute(message: Message, rawArgs: string[]) {
                 const mentionMatch = args[i + 1].match(/^<@!?(\d+)>$/);
                 hostId = mentionMatch ? mentionMatch[1] : args[i + 1]; // Extract user ID
                 i += 2;
+            } else if (args[i] === "--extraentries") {
+                useExtraEntries = true; // ✅ Enable extra entries when flag is present
+                i++;
             } else if (!durationArg && args[i].match(/^\d+[smhd]$/)) {
                 durationArg = args[i];
                 i++;
@@ -65,7 +77,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
         // ✅ **Validation Checks**
         if (!durationArg || !winnerCount || titleArgs.length === 0) {
-            return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1 --role VIPGiveaway --host @User`");
+            return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1 --role VIPGiveaway --host @User --extraentries`");
         }
 
         const title = titleArgs.join(" "); // ✅ Ensure title is correctly extracted
@@ -110,7 +122,8 @@ export async function execute(message: Message, rawArgs: string[]) {
             .setFields([
                 { name: "🎟️ Total Participants", value: "0 users", inline: true },
                 { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-                { name: "🏆 Winners", value: `${winnerCount}`, inline: true }
+                { name: "🏆 Winners", value: `${winnerCount}`, inline: true },
+                { name: "🔹 Extra Entries Enabled", value: useExtraEntries ? "✅ Yes" : "❌ No", inline: true }
             ]);
 
         let giveawayMessage;
@@ -157,11 +170,11 @@ export async function execute(message: Message, rawArgs: string[]) {
                 duration,
                 endsAt,
                 participants: JSON.stringify([]),
-                winnerCount
+                winnerCount,
+                extraFields: JSON.stringify({ useExtraEntries }) // ✅ Store extra entries setting
             }, { transaction });
 
             await transaction.commit();
-            console.log(`✅ Giveaway successfully saved with messageId: ${giveawayData.get("messageId")}`);
         } catch (error) {
             await transaction.rollback();
             console.error("❌ Error saving giveaway:", error);

@@ -24,8 +24,9 @@ ExtraEntries.init({
 }, {
   sequelize,
   modelName: 'ExtraEntries',
-  tableName: 'ExtraEntries',
-  timestamps: false
+  tableName: 'extra_entries',
+  timestamps: false,
+  freezeTableName: true,
 });
 
 export { ExtraEntries };

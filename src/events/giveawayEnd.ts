@@ -3,11 +3,9 @@ import {
   TextChannel,
   EmbedBuilder,
   Message,
-  ButtonBuilder,
-  ButtonStyle,
-  ActionRowBuilder
 } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
+import { ExtraEntries } from '../models/ExtraEntries';
 import { GuildSettings } from '../models/GuildSettings';
 import { cache } from '../utils/giveawayCache';
 import { handleMinibossCommand } from './handleMinibossCommnand';
@@ -64,14 +62,63 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     let participants: string[] = JSON.parse(giveaway.get("participants") ?? "[]");
     console.log(`🎟️ Total Participants for Giveaway ${giveawayId}: ${participants.length}`);
 
+    if (participants.length === 0) {
+      console.warn(`⚠️ No participants found for giveaway ${giveawayId}.`);
+    }
+
+    // ✅ Fetch Extra Entries Data only if giveaway allows it
+    let useExtraEntries = false;
+    try {
+      const extraFields = JSON.parse(giveaway.get("extraFields") ?? "{}");
+      useExtraEntries = extraFields.useExtraEntries === "true";
+    } catch {
+      useExtraEntries = false;
+    }
+
+    const shouldUseExtraEntries = useExtraEntries || giveaway.get("type") === "giveaway"; // ✅ Only standard giveaways + flagged customs use extra entries
+
+    const participantsWithWeights: string[] = [];
+
+    if (shouldUseExtraEntries) {
+      console.log(`📌 Applying extra entries for Giveaway ${giveawayId}.`);
+
+      const extraEntriesData = await ExtraEntries.findAll({ where: { guildId } });
+      const roleBonusMap = new Map(extraEntriesData.map(entry => [entry.roleId, entry.bonusEntries]));
+
+      for (const userId of participants) {
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) continue;
+
+        let extraEntries = 0;
+        for (const [roleId, bonusEntries] of roleBonusMap) {
+          if (member.roles.cache.has(roleId)) {
+            extraEntries += bonusEntries;
+          }
+        }
+
+        for (let i = 0; i <= extraEntries; i++) {
+          participantsWithWeights.push(userId);
+        }
+      }
+    } else {
+      participantsWithWeights.push(...participants); // ✅ No extra entries, just use standard list
+    }
+
+    // ✅ Select Winners Using Weighted Randomization
     let winners = "No winners.";
     let winnerList: string[] = [];
+    const maxWinners = Number(giveaway.get("winnerCount"));
 
-    if (participants.length > 0) {
-      const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5);
-      winnerList = shuffledParticipants.slice(0, Number(giveaway.get("winnerCount")));
-      winners = winnerList.map((id) => `<@${id}>`).join(", ");
+    while (winnerList.length < maxWinners && participantsWithWeights.length > 0) {
+      const winnerIndex = Math.floor(Math.random() * participantsWithWeights.length);
+      const winner = participantsWithWeights.splice(winnerIndex, 1)[0];
+
+      if (!winnerList.includes(winner)) {
+        winnerList.push(winner);
+      }
     }
+
+    winners = winnerList.length > 0 ? winnerList.map(id => `<@${id}>`).join(", ") : "No winners.";
 
     // ✅ Store necessary data in cache before deleting from DB
     cache.set(String(giveawayId), {
@@ -120,18 +167,10 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
         minibossChannelId = guildSettings?.get("minibossChannelId") ?? null;
 
-        if (minibossChannelId) {
-          console.log(`✅ Miniboss channel ID found in GuildSettings: ${minibossChannelId}`);
-        } else {
+        if (!minibossChannelId) {
           console.error(`❌ Miniboss channel ID is missing from both Giveaway and GuildSettings for guild ${guildId}`);
           return;
         }
-      }
-
-      // ✅ Ensure `minibossChannelId` is valid
-      if (typeof minibossChannelId !== "string") {
-        console.error(`❌ Miniboss channel ID is not a valid string: ${JSON.stringify(minibossChannelId)}`);
-        return;
       }
 
       const minibossChannel = guild.channels.cache.get(minibossChannelId) as TextChannel;
@@ -149,14 +188,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
         content: `🎉 **Giveaway Ended!** 🎉\n🏆 **Winners:** ${winners}\n🔗 [Giveaway Link](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,
       });
     }
-
-    // ✅ Ensure cache is stored before deleting
-    cache.set(String(giveawayId), {
-      guildId: guildId,
-      winnerCount: giveaway.get("winnerCount"),
-      participants: winnerList,
-      type: giveaway.get("type"),
-    });
 
     await Giveaway.destroy({ where: { id: giveawayId } });
 

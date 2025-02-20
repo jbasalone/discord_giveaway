@@ -93,14 +93,14 @@ export async function execute(message: Message, rawArgs: string[]) {
     await SavedGiveaway.create({
         guildId: message.guild.id,
         name: templateName,
-        title: `🎉 Saved Giveaway: ${templateName}`,
-        description: `This is a saved ${giveawayType} giveaway template.`,
-        type: giveawayType, // ✅ NEW: Save type ("custom" or "miniboss")
+        title: `🎉 ${templateName}`,
+        description: `${giveawayType} giveaway template.`,
+        type: giveawayType,
         duration,
         winnerCount,
         forceStart,
-        role: selectedRole, // ✅ NEW: Save the role
-        host: hostId, // ✅ NEW: Save the host
+        role: selectedRole,
+        host: hostId,
         extraFields: Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null
     });
 

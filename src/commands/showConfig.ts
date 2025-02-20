@@ -2,7 +2,6 @@ import { Message, EmbedBuilder, PermissionsBitField, Colors } from 'discord.js';
 import { getGuildPrefix } from '../utils/getGuildPrefix';
 import { GuildSettings } from '../models/GuildSettings';
 import { ExtraEntries } from '../models/ExtraEntries';
-import config from '../config.json';
 
 export async function execute(message: Message, guildId?: string) {
   if (!message.guild) {
@@ -52,6 +51,20 @@ export async function execute(message: Message, guildId?: string) {
         ? Object.entries(roleMappings).map(([roleName, roleId]) => `**${roleName}**: <@&${roleId}>`).join("\n")
         : "❌ No ping roles set.";
 
+    // ✅ Fetch Extra Entries Roles (🔍 FIXED)
+    const extraEntries = await ExtraEntries.findAll({ where: { guildId } });
+
+    const extraEntriesText = extraEntries.length > 0
+        ? extraEntries
+            .map(entry => {
+              const roleId = entry.get("roleId") ?? "Unknown Role";
+              const bonusEntries = entry.get("bonusEntries") ?? 0;
+
+              return `<@&${roleId}>: **+${bonusEntries} Entries**`;
+            })
+            .join("\n")
+        : "❌ No extra entry roles set.";
+
     // ✅ Create Embed
     const embed = new EmbedBuilder()
         .setTitle(`⚙️ Server Giveaway Configuration`)
@@ -62,7 +75,8 @@ export async function execute(message: Message, guildId?: string) {
             { name: "🎭 Default Giveaway Role", value: defaultRoleMention, inline: true },
             { name: "📌 Miniboss Channel", value: minibossChannelMention, inline: true },
             { name: "🔐 Allowed Roles (Who Can Start Giveaways)", value: allowedRolesText, inline: false },
-            { name: "📣 Giveaway Ping Roles", value: roleMappingsText, inline: false }
+            { name: "📣 Giveaway Ping Roles", value: roleMappingsText, inline: false },
+            { name: "🎟️ Extra Entry Roles", value: extraEntriesText, inline: false } // ✅ FIXED FIELD
         )
         .setFooter({ text: "Only server admins can modify these settings." });
 

@@ -1,26 +1,7 @@
-import { DataTypes, Model, Optional } from 'sequelize';
+import { DataTypes, Model } from 'sequelize';
 import { sequelize } from '../database';
 
-interface GiveawayAttributes {
-    id: number;
-    guildId: string;
-    host: string;
-    channelId: string;
-    messageId: string;
-    title: string;
-    description: string;
-    type: 'custom' | 'miniboss' | 'giveaway'; // ✅ Add this line
-    duration: number;
-    endsAt: number;
-    participants: string;
-    winnerCount: number;
-    extraFields?: string;
-    forceStart?: boolean;
-}
-
-interface GiveawayCreationAttributes extends Optional<GiveawayAttributes, 'id'> {}
-
-class Giveaway extends Model<GiveawayAttributes, GiveawayCreationAttributes> implements GiveawayAttributes {
+export class Giveaway extends Model {
     public id!: number;
     public guildId!: string;
     public host!: string;
@@ -28,13 +9,14 @@ class Giveaway extends Model<GiveawayAttributes, GiveawayCreationAttributes> imp
     public messageId!: string;
     public title!: string;
     public description!: string;
-    public type!: 'custom' | 'miniboss' | 'giveaway'; // ✅ Add this line
+    public type!: 'custom' | 'miniboss' | 'giveaway';
     public duration!: number;
     public endsAt!: number;
     public participants!: string;
     public winnerCount!: number;
-    public extraFields?: string;
-    public forceStart?: boolean;
+    public extraFields!: string | null;
+    public forceStart!: boolean;
+    public useExtraEntries!: boolean;  // ✅ Add this field
 }
 
 Giveaway.init(
@@ -42,72 +24,76 @@ Giveaway.init(
         id: {
             type: DataTypes.INTEGER,
             autoIncrement: true,
-            primaryKey: true,
+            primaryKey: true
         },
         guildId: {
             type: DataTypes.STRING,
-            allowNull: false,
+            allowNull: false
         },
         host: {
             type: DataTypes.STRING,
-            allowNull: false,
+            allowNull: false
         },
         channelId: {
             type: DataTypes.STRING,
-            allowNull: false,
+            allowNull: false
         },
         messageId: {
             type: DataTypes.STRING,
-            allowNull: false,
+            allowNull: false
         },
         title: {
             type: DataTypes.STRING,
-            allowNull: false,
+            allowNull: false
         },
         description: {
             type: DataTypes.TEXT,
-            allowNull: false,
+            allowNull: false
         },
         type: {
-            type: DataTypes.ENUM('custom', 'miniboss', 'giveaway'), // ✅ Ensure `type` is stored correctly in the DB
+            type: DataTypes.ENUM('custom', 'miniboss', 'giveaway'),
             allowNull: false,
-            defaultValue: 'custom',
+            defaultValue: 'custom'
         },
         duration: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: false
         },
         endsAt: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: false
         },
         participants: {
             type: DataTypes.TEXT,
             allowNull: false,
-            defaultValue: '[]',
+            defaultValue: "[]"
         },
         winnerCount: {
             type: DataTypes.INTEGER,
             allowNull: false,
-            defaultValue: 1,
+            defaultValue: 1
         },
         extraFields: {
             type: DataTypes.TEXT,
-            allowNull: true,
+            allowNull: true
         },
         forceStart: {
             type: DataTypes.BOOLEAN,
             allowNull: true,
-            defaultValue: false,
+            defaultValue: false
         },
+        useExtraEntries: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        }
     },
     {
         sequelize,
         modelName: 'Giveaway',
         tableName: 'giveaways',
-        timestamps: false,
-        freezeTableName: true,
+        timestamps: false
     }
 );
 
-export { Giveaway };
+export default Giveaway;
