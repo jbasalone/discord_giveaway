@@ -3,58 +3,56 @@ import { SavedGiveaway } from '../models/SavedGiveaway';
 import { execute as startCustomGiveaway } from '../commands/customGiveaway';
 import { execute as startMinibossGiveaway } from '../commands/minibossGiveaway';
 
-export async function execute(message: Message, args: string[]) {
+export async function execute(message: Message, rawArgs: string[]) {
   if (!message.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
     return message.reply("❌ You need `Manage Messages` permission to start a saved giveaway.");
   }
 
-  if (args.length < 1) {
+  if (rawArgs.length < 1) {
     return message.reply("❌ You must specify a template **ID number**.");
   }
 
-  const templateId = parseInt(args[0], 10);
+  const templateId = parseInt(rawArgs[0], 10);
+  console.log("🔍 [DEBUG] Template ID:", templateId);
+
   if (isNaN(templateId)) {
     return message.reply("❌ Invalid ID. Please enter a **valid template ID number**.");
   }
 
   try {
-    // ✅ Fetch saved giveaway template by ID
     const template = await SavedGiveaway.findByPk(templateId);
 
     if (!template) {
       return message.reply(`❌ No saved giveaway template found with ID **${templateId}**.`);
     }
 
-    // ✅ Extract key values from template
-    const giveawayName = template.get("name") as string;
-    const duration = template.get("duration");
-    const winnerCount = template.get("winnerCount");
-    const forceStart = template.get("forceStart") ?? false;
     const giveawayType = template.get("type") ?? "custom"; // Defaults to "custom"
     const isMiniboss = giveawayType === "miniboss";
 
-    // ✅ Ensure `extraFields` is always an object
-    let extraFields: Record<string, string> = {};
-    try {
-      extraFields = template.get("extraFields") ? JSON.parse(template.get("extraFields") as string) : {};
-    } catch (error) {
-      console.error(`❌ Error parsing extraFields for ${giveawayName}:`, error);
-    }
+    console.log(`🚀 Starting ${isMiniboss ? "Miniboss" : "Custom"} Giveaway with Template ID: ${templateId}`);
 
-    // ✅ Construct argument array correctly
-    const argsToPass = [
-      `"${giveawayName}"`, // Properly format title
-      `${duration}`, // Giveaway Duration
-      ...(isMiniboss ? (forceStart ? ["--force"] : []) : [`${winnerCount}`]), // Force or Winner Count
-      ...Object.entries(extraFields).flatMap(([key, value]) => ["--field", `"${key}: ${value}"`]) // Proper field formatting
+    const roleId = template.get("role") ?? null; // Get role from template (if exists)
+
+    let argsToPass: string[] = [
+      `${template.get("id")}`,
+      `"${template.get("title")}"`,
+      `${template.get("duration")}`,
+      `${template.get("winnerCount")}`,
     ];
 
-    // ✅ Determine correct giveaway function to execute
+    const extraFields = template.get("extraFields") ? JSON.parse(template.get("extraFields") as string) : {};
+    for (const [key, value] of Object.entries(extraFields)) {
+      argsToPass.push("--field", `"${key}: ${value}"`);
+    }
+
+// ✅ Append Role ID as a Flag if It Exists
+    if (roleId && typeof roleId === "string") {
+      argsToPass.push("--role", roleId);
+    }
+
     if (isMiniboss) {
-      console.log(`🚀 Starting Miniboss Giveaway: ${giveawayName}`);
       await startMinibossGiveaway(message, argsToPass);
     } else {
-      console.log(`🚀 Starting Custom Giveaway: ${giveawayName}`);
       await startCustomGiveaway(message, argsToPass);
     }
 

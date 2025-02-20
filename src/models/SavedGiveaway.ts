@@ -1,18 +1,18 @@
-import { DataTypes, Model } from "sequelize";
-import { sequelize } from "../database";
+import { DataTypes, Model } from 'sequelize';
+import { sequelize } from '../database';
 
-class SavedGiveaway extends Model {
+export class SavedGiveaway extends Model {
     public id!: number;
-    public guildId!: string;
+    declare public guildId: number;
     public name!: string;
     public title!: string;
     public description!: string;
-    public type!: "custom" | "miniboss";  // ✅ NEW: Store giveaway type
     public duration!: number;
     public winnerCount!: number;
-    public forceStart?: boolean;
     public extraFields?: string;
-    public role?: string;
+    public type!: 'custom' | 'miniboss' | 'giveaway';
+    public forceStart!: boolean;
+    public host!: string;
 }
 
 SavedGiveaway.init(
@@ -23,13 +23,13 @@ SavedGiveaway.init(
             primaryKey: true,
         },
         guildId: {
-            type: DataTypes.STRING,
+            type: DataTypes.BIGINT,
             allowNull: false,
         },
         name: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: true,  // Ensures template names are unique
+            unique: true,
         },
         title: {
             type: DataTypes.STRING,
@@ -39,11 +39,6 @@ SavedGiveaway.init(
             type: DataTypes.TEXT,
             allowNull: false,
         },
-        type: {
-            type: DataTypes.ENUM("custom", "miniboss"),  // ✅ NEW: Store `custom` or `miniboss`
-            allowNull: false,
-            defaultValue: "custom",  // ✅ Default to `custom`
-        },
         duration: {
             type: DataTypes.INTEGER,
             allowNull: false,
@@ -51,27 +46,36 @@ SavedGiveaway.init(
         winnerCount: {
             type: DataTypes.INTEGER,
             allowNull: false,
+            defaultValue: 1,
+        },
+        extraFields: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        type: {
+            type: DataTypes.ENUM('custom', 'miniboss', 'giveaway'),
+            allowNull: false,
+            defaultValue: 'custom',
         },
         forceStart: {
             type: DataTypes.BOOLEAN,
             allowNull: true,
             defaultValue: false,
         },
-        extraFields: {
-            type: DataTypes.TEXT,
-            allowNull: true,
-        },
         role: {
             type: DataTypes.STRING,
-            allowNull: true,
+            allowNull: false,
         },
+        host: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        }
     },
     {
         sequelize,
-        modelName: "SavedGiveaway",
-        tableName: "saved_giveaways",
-        timestamps: true,
+        modelName: 'SavedGiveaway',
+        tableName: 'saved_giveaways',
+        timestamps: false,
+        freezeTableName: true,
     }
 );
-
-export { SavedGiveaway };

@@ -8,10 +8,10 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     if (rawArgs.length < 3) {
-        return message.reply("❌ Invalid usage! Example: `!ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\"`");
+        return message.reply("❌ Invalid usage! Example: `!ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User`");
     }
 
-    // ✅ Fix Argument Parsing (Supports Quotes and Proper Flag Detection)
+    // ✅ **Fix Argument Parsing (Supports Quotes and Proper Flag Detection)**
     const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
 
     let fieldArgs: string[] = [];
@@ -19,6 +19,8 @@ export async function execute(message: Message, rawArgs: string[]) {
     let forceStart = false;
     let winnerCount: number | null = null;
     let giveawayType: "custom" | "miniboss" = "custom"; // ✅ Default to `custom`
+    let selectedRole: string | null = null;
+    let hostId: string = message.author.id; // ✅ Default host is the user saving the template
 
     // ✅ **Ensure `--type` comes right after `ga save`**
     if (args[0] === "--type" && args[1]) {
@@ -37,6 +39,13 @@ export async function execute(message: Message, rawArgs: string[]) {
         } else if (args[i] === "--field" && args[i + 1]) {
             fieldArgs.push(args[i + 1]);
             i++;
+        } else if (args[i] === "--role" && args[i + 1]) {
+            selectedRole = args[i + 1];
+            i++;
+        } else if (args[i] === "--host" && args[i + 1]) {
+            const mentionMatch = args[i + 1].match(/^<@!?(\d+)>$/);
+            hostId = mentionMatch ? mentionMatch[1] : args[i + 1];
+            i++;
         } else {
             mainArgs.push(args[i]);
         }
@@ -44,7 +53,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     // ✅ **Extract Required Parameters**
     if (mainArgs.length < 2) {
-        return message.reply("❌ Invalid usage! Example: `!ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\"`.");
+        return message.reply("❌ Invalid usage! Example: `!ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User`.");
     }
 
     const templateName = mainArgs.shift()?.toLowerCase() ?? "";
@@ -90,10 +99,12 @@ export async function execute(message: Message, rawArgs: string[]) {
         duration,
         winnerCount,
         forceStart,
+        role: selectedRole, // ✅ NEW: Save the role
+        host: hostId, // ✅ NEW: Save the host
         extraFields: Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null
     });
 
     return message.reply(
-        `✅ **"${templateName}"** saved! \n📌 **Type:** ${giveawayType.toUpperCase()} \n⏳ **Duration:** ${durationArg} \n🚀 **Force Start:** ${forceStart ? "Enabled" : "Disabled"} \n🏆 **Winners:** ${winnerCount} \n📋 **Fields:** ${Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : "None"}`
+        `✅ **"${templateName}"** saved! \n📌 **Type:** ${giveawayType.toUpperCase()} \n⏳ **Duration:** ${durationArg} \n🏆 **Winners:** ${winnerCount} \n🚀 **Force Start:** ${forceStart ? "Enabled" : "Disabled"} \n👤 **Host:** <@${hostId}> \n📢 **Role Ping:** ${selectedRole ?? "None"} \n📋 **Fields:** ${Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : "None"}`
     );
 }

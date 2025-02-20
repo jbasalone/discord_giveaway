@@ -35,14 +35,20 @@ export async function handleHelpSelection(interaction: Interaction) {
 
         const commands: Record<string, { name: string; value: string }[]> = {
             "basic": [
-                { name: "`!ga create <duration> <winners>`", value: "🎉 Starts a new giveaway. Example: `!ga create 30s 1`" },
-                { name: "`!ga custom <title> <duration> <winners>`", value: "🛠 Starts a custom giveaway with named fields." },
+                {name: "Optional Flags: `[--host]`", value: "sets a host for the role, defaults to you"},
+                {name: "Optional Flags:`[--field \"name: value\"]`", value: "sets the embed fields like `req: none`, can have more than 1"},
+                {name: "Optional Flags: `[--role \"rolename\"]`", value: "uses the role name to ping when GA starts"},
+                { name: "`!ga create<title> <duration> <winners> --role`", value: "🎉 Starts a quick new giveaway. Example: `!ga create 30s 1`" },
+                { name: "`!ga custom <title> <duration> <winners> --role --fields(optional) <title:desc> `", value: "🛠 Starts a custom giveaway with fields. `!ga " },
                 { name: "`!ga reroll <giveawayID>`", value: "🔄 **Rerolls winners** for a completed giveaway." },
                 { name: "`!ga delete <giveawayID>`", value: "❌ **Deletes an active giveaway.**" }
             ],
             "template": [
-                { name: "`!ga save --type <custom|miniboss> <name> <duration> [winners]`", value: "💾 Saves a giveaway as a **template**." },
-                { name: "`!ga start <ID>`", value: "🚀 Starts a giveaway from a saved template." },
+                {name: "Optional Flags: `[--host]`", value: "sets a host for the role, defaults to you"},
+                {name: "Optional Flags:`[--field \"name: value\"]`", value: "sets the embed fields like `req: none`"},
+                {name: "Optional Flags: `[--role \"rolename]`", value: "uses the role name to ping when GA starts"},
+                { name: "`!ga save --type <custom|miniboss> <name> <duration> [winners] --role `", value: "💾 Saves a giveaway as a **template**." },
+                { name: "`!ga start <ID> --role`", value: "🚀 Starts a giveaway from a saved template." },
                 { name: "`!ga listtemplate`", value: "📜 Lists all **saved giveaway templates**." },
                 { name: "`!ga deletetemplate <ID>`", value: "❌ Deletes a saved template **by ID**." },
                 { name: "`!ga edit <ID> --title \"New Title\"`", value: "✏️ Edits the **title** of a saved template." },
@@ -53,14 +59,24 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "`!ga edit <ID> --field \"Requirement: Level 100+\"`", value: "📋 **Modifies giveaway fields**." }
             ],
             "admin": [
-                { name: "`!ga setprefix <prefix>`", value: "⚙️ Sets a **custom bot prefix** for the server." },
+                { name: "`!ga showconfig`", value: "⚙️ shows the config of the server." },
+                { name: "`!ga setprefix <prefix>`", value: "⚙️ Sets a **custom bot prefix** for the server. default is `!`" },
                 { name: "`!ga showconfig`", value: "📋 Displays **server giveaway settings**." },
                 { name: "`!ga setextraentry @role <entries>`", value: "➕ Adds **bonus entries** for a role." },
-                { name: "`!ga setminibosschannel <#channel>`", value: "🏆 Sets the **Miniboss Event channel**." }
+                { name: "`!ga setminibosschannel <#channel>`", value: "🏆 Sets the **Miniboss Event channel**." },
+                { name: "`!ga setrole --allowed <roleid>`", value: "Sets the roles allowed to run GA**." },
+                { name: "`!ga setrole --role <name> <roleid>`", value: "🏆 sets the pingable roles for GA." },
+                { name: "`!ga listroles`", value: "🏆 lists all configured roles" },
+
+
+
             ],
             "miniboss": [
+                {name: "Optional Flags: `[--force]`", value: "allows the GA to end with less than 9 particpants"},
+                {name: "Optional Flags:`[--field \"name: value\"]`", value: "sets the embed fields"},
+                {name: "Optional Flags: `[--role \"rolename]`", value: "uses the role name to ping when GA starts"},
                 { name: "`!ga miniboss <title> <duration> [--force] [--field \"name: value\"]`", value: "🐲 **Starts a Miniboss Giveaway**." },
-                { name: "`!ga mb <title> <duration>`", value: "⚔️ Short alias for `!ga miniboss`." },
+                { name: "`!ga mb <title> <duration> --role`", value: "⚔️ Short alias for `!ga miniboss`." },
                 { name: "`!ga setminibosschannel <#channel>`", value: "🏆 Sets the **Miniboss Giveaway channel**." }
             ]
         };

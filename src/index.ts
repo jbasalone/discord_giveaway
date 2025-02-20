@@ -1,9 +1,19 @@
-import { Client, GatewayIntentBits, Partials, Events, MessageFlags } from 'discord.js';
+import {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  Events,
+  MessageFlags,
+} from 'discord.js';
 import dotenv from 'dotenv';
 import { connectDB } from './database';
 import { handleGiveawayEnd } from './events/giveawayEnd';
 import { getGuildPrefix } from './utils/getGuildPrefix';
+import { Giveaway } from './models/Giveaway';
+import { Op } from 'sequelize';
 
+import { execute as executeSetLevel } from './commands/setLevel';
+import { execute as executeEditTemplate } from './commands/editTemplate';
 import { execute as executeStartTemplate } from './commands/startTemplate';
 import { execute as executeSetRole } from './commands/setRole';
 import { execute as executeSaveTemplate } from './commands/saveTemplate';
@@ -17,6 +27,7 @@ import { execute as executeGiveaway } from './commands/giveaway';
 import { execute as executeCustomGiveaway } from './commands/customGiveaway';
 import { execute as executeMinibossGiveaway } from './commands/minibossGiveaway';
 import { execute as executeSetMinibossChannel } from './commands/setMinibossChannel';
+import { execute as executeListRoles } from './commands/listRoles';
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -41,9 +52,18 @@ async function startBot() {
     client.once(Events.ClientReady, async () => {
       console.log(`✅ Bot is online! Logged in as ${client.user?.tag}`);
 
-      setInterval(() => {
+      setInterval(async () => {
         console.log("🔍 Checking for expired giveaways...");
-        handleGiveawayEnd(client);
+
+        const currentTime = Math.floor(Date.now() / 1000);
+        const expiredGiveaways = await Giveaway.findAll({
+          where: { endsAt: { [Op.lte]: currentTime } }
+        });
+
+        for (const giveaway of expiredGiveaways) {
+          console.log(`⏳ Expired Giveaway Found: ID ${giveaway.get("id")}`);
+          await handleGiveawayEnd(client, giveaway.get("id"));
+        }
       }, 60 * 1000);
     });
 
@@ -51,10 +71,7 @@ async function startBot() {
       if (message.author.bot || !message.guild) return;
 
       const guildId = message.guild.id;
-      let prefix = await getGuildPrefix(guildId);
-      if (!prefix) {
-        prefix = "!ga";
-      }
+      let prefix = await getGuildPrefix(guildId) || "!ga";
 
       if (!message.content.startsWith(prefix)) return;
 
@@ -69,41 +86,40 @@ async function startBot() {
 
       try {
         switch (command) {
-          case 'create':
-          case 'quick':
+          case 'create': case 'quick':
             await executeGiveaway(message, args);
             break;
           case 'custom':
             await executeCustomGiveaway(message, args);
             break;
-          case 'miniboss':
-          case 'mb':
+          case 'miniboss': case 'mb':
             await executeMinibossGiveaway(message, args);
             break;
-          case 'setextraentry':
-          case 'setentry':
+          case 'setextraentry': case 'setentry':
             await executeSetExtraEntries(message, args, guildId);
             break;
-          case 'setminibosschannel':
-          case 'setmbch':
+          case 'setminibosschannel': case 'setmbch':
             await executeSetMinibossChannel(message, args);
             break;
           case 'save':
             await executeSaveTemplate(message, args);
             break;
-          case 'starttemplate':
-          case 'start':
+          case 'edit':
+            await executeEditTemplate(message, args);
+            break;
+          case 'listroles': case 'roles':
+            await executeListRoles(message);
+            break;
+          case 'starttemplate': case 'start':
             await executeStartTemplate(message, args);
             break;
-          case 'listtemplates':
-          case 'listtemp':
-          case 'listtemplate':
+          case 'listtemplates': case 'listtemp': case 'listtemplate':
             await executeListTemplates(message);
             break;
           case 'deletetemplate':
             await executeDeleteTemplate(message, args);
             break;
-          case 'showconfig':
+          case 'showconfig': case 'config':
             await executeShowConfig(message, guildId);
             break;
           case 'reroll':
@@ -112,9 +128,11 @@ async function startBot() {
           case 'help':
             await executeHelp(message);
             break;
-          case 'setrole':
-          case 'setroles':
-            await executeSetRole(message, args)
+          case 'setlevel': case 'level':
+            await executeSetLevel(message, args);
+            break;
+          case 'setrole': case 'setroles':
+            await executeSetRole(message, args);
             break;
           default:
             await message.reply(`❌ Unknown command. Use \`${prefix} ga help\` to see available commands.`);
@@ -133,14 +151,21 @@ async function startBot() {
           await handleHelpSelection(interaction);
         } else if (interaction.isButton()) {
           if (interaction.customId.startsWith("miniboss-")) {
-            await handleMinibossCommand(interaction); // ✅ Handle Miniboss Command Selection
+            const giveawayId = interaction.customId.split("-").pop();
+
+            if (!giveawayId) {
+              return interaction.reply({ content: "❌ Invalid Miniboss Giveaway ID.", ephemeral: true });
+            }
+
+            // ✅ Now pass both `client` and `interaction` to edit the message instead of sending a new one
+            await handleMinibossCommand(client, parseInt(giveawayId), interaction);
           } else {
             await executeJoinLeave(interaction);
           }
         }
       } catch (error) {
-        console.error('❌ Error handling interaction:', error);
-        await interaction.reply({ content: '❌ An error occurred.', flags: MessageFlags.SuppressEmbeds });
+        console.error("❌ Error handling interaction:", error);
+        await interaction.reply({ content: "❌ An error occurred.", flags: MessageFlags.SuppressEmbeds });
       }
     });
 
@@ -152,6 +177,7 @@ async function startBot() {
 
 // ✅ Ensures startBot is awaited and handled correctly
 export { client };
+
 (async () => {
   try {
     await startBot();

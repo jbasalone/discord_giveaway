@@ -1,55 +1,160 @@
-import { ButtonInteraction } from 'discord.js';
+import {
+    Client,
+    ButtonInteraction,
+    TextChannel,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ComponentType
+} from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
+import { GuildSettings } from '../models/GuildSettings';
 import { cache } from '../utils/giveawayCache';
+import { Model } from 'sequelize';
+
+// ✅ Prevent duplicate button responses
+const interactionCache = new Set<string>();
 
 /**
- * Handles the Miniboss command selection interaction.
+ * Handles the Miniboss giveaway logic after it ends.
  */
-export async function handleMinibossCommand(interaction: ButtonInteraction) {
-    if (!interaction.isButton()) return;
+export async function handleMinibossCommand(client: Client, giveawayId: number, interaction?: ButtonInteraction) {
+    console.log(`🔍 Handling Miniboss Giveaway: ${giveawayId}`);
 
-    const customId = interaction.customId;
-    const isMobile = customId.includes("mobile");
-    const giveawayId = customId.split("-").pop();
-
-    if (!giveawayId) {
-        return interaction.reply({ content: "❌ Invalid Giveaway ID.", ephemeral: true });
-    }
-
-    // ✅ Check the Cache First (If Giveaway is Deleted)
     let giveaway = await Giveaway.findByPk(giveawayId);
     if (!giveaway) {
         console.log(`⚠️ Giveaway ${giveawayId} not found in database. Checking cache.`);
-        giveaway = cache.get(giveawayId); // Retrieve from cache
+        giveaway = cache.get(String(giveawayId)); // ✅ Ensure cache is used
     }
 
     if (!giveaway) {
-        return interaction.reply({ content: "❌ Giveaway has ended, and no data is available.", ephemeral: true });
+        console.error(`❌ Giveaway ${giveawayId} does not exist.`);
+        if (interaction) {
+            await interaction.reply({ content: "❌ This giveaway has ended and cannot be accessed.", ephemeral: true }).catch(() => {});
+        }
+        return;
     }
 
-    // ✅ Handle Sequelize Model vs Cached Object
-    const isSequelizeModel = typeof giveaway.get === "function";
-    const participants = isSequelizeModel ? JSON.parse(giveaway.get("participants") ?? "[]") : giveaway.participants ?? [];
+    const isSequelizeModel = giveaway instanceof Model;
+    const guildId = isSequelizeModel ? giveaway.get("guildId") : giveaway.guildId;
 
-    if (!Array.isArray(participants) || participants.length === 0) {
-        return interaction.reply({ content: "❌ No winners available for this giveaway.", ephemeral: true });
+    if (!guildId) {
+        console.error(`❌ Missing guildId for giveaway ${giveawayId}`);
+        return;
     }
 
-    const forceMode = isSequelizeModel ? giveaway.get("forceStart") ?? false : giveaway.forceStart ?? false;
-    const numWinners = forceMode ? participants.length : 9;
-    const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5);
-    const winnersList = shuffledParticipants.slice(0, numWinners);
-
-    // ✅ Generate Correct Miniboss Command
-    let command;
-    if (isMobile) {
-        command = `<@555955826880413696> miniboss ${winnersList.map(id => `<@${id}>`).join(' ')}`;
-    } else {
-        command = `<@555955826880413696> miniboss ${winnersList.map(id => `<@${id}>`).join(' ')}`;
+    // ✅ Fetch the guild from the client cache
+    const guild = client.guilds.cache.get(String(guildId));
+    if (!guild) {
+        console.error(`❌ Guild ${guildId} not found in cache.`);
+        return;
     }
 
-    await interaction.reply({
-        content: `**Copy & Paste This:**\n\`${command}\``,
-        ephemeral: true
+    let minibossChannelId: string | null = null;
+
+    // ✅ Fetch `minibossChannelId` from `GuildSettings`
+    const guildSettings = await GuildSettings.findOne({
+        attributes: ['minibossChannelId'],
+        where: { guildId: String(guildId) },
+    });
+
+    if (guildSettings) {
+        minibossChannelId = guildSettings.get("minibossChannelId") as string | null;
+    }
+
+    if (!minibossChannelId || typeof minibossChannelId !== "string") {
+        console.error(`❌ Invalid or missing Miniboss channel for guild ${guildId}`);
+        return;
+    }
+
+    const minibossChannel = guild.channels.cache.get(minibossChannelId) as TextChannel;
+    if (!minibossChannel) {
+        console.error(`❌ Miniboss channel ${minibossChannelId} does not exist!`);
+        return;
+    }
+
+    // ✅ Ensure winners list is always correct
+    let participants: string[] = isSequelizeModel ? JSON.parse(giveaway.get("participants") ?? "[]") : giveaway.participants ?? [];
+
+    // ✅ If no participants exist, fetch from cache before deletion
+    if (!participants.length) {
+        console.warn(`⚠️ No participants found in DB for giveaway ${giveawayId}, checking cache.`);
+        const cachedData = cache.get(String(giveawayId));
+        participants = cachedData?.participants ?? [];
+    }
+
+    // ✅ If participants are still empty, log a warning and avoid empty responses
+    if (!participants.length) {
+        console.error(`❌ Giveaway ${giveawayId} has no valid winners stored. Avoiding empty response.`);
+        return;
+    }
+
+    let winners = participants.length > 0 ? participants.map(id => `<@${id}>`).join(", ") : "**No winners.**";
+
+    // ✅ Preserve the command in memory to avoid issues when giveaway is deleted
+    const mobileCommand = `<@555955826880413696> miniboss ${participants.map(id => `<@${id}>`).join(" ")}`;
+    const desktopCommand = `<@555955826880413696> miniboss ${participants.map(id => `<@${id}>`).join(" ")}`;
+
+    // ✅ Create buttons for Mobile & Desktop
+    const desktopButton = new ButtonBuilder()
+        .setCustomId(`miniboss-desktop-${giveawayId}`)
+        .setLabel("Desktop Command")
+        .setStyle(ButtonStyle.Primary);
+
+    const mobileButton = new ButtonBuilder()
+        .setCustomId(`miniboss-mobile-${giveawayId}`)
+        .setLabel("Mobile Command")
+        .setStyle(ButtonStyle.Success);
+
+    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(desktopButton, mobileButton);
+
+    // ✅ Prevent duplicate messages by checking if a message has already been sent
+    const cacheKey = `miniboss-message-${giveawayId}`;
+    if (!cache.has(cacheKey)) {
+        cache.set(cacheKey, true);
+
+        await minibossChannel.send({
+            content: `🎉 **Miniboss Giveaway Ended!** 🎉\n🏆 **Winners:** ${winners}`,
+            components: [actionRow],
+        });
+    }
+
+    // ✅ Handle button clicks (Mobile/Desktop)
+    const filter = (i: ButtonInteraction) =>
+        i.isButton() && (i.customId === `miniboss-mobile-${giveawayId}` || i.customId === `miniboss-desktop-${giveawayId}`);
+
+    const collector = minibossChannel.createMessageComponentCollector({
+        filter,
+        componentType: ComponentType.Button,
+        time: 600_000, // 10 minutes
+    });
+
+    collector.on("collect", async (buttonInteraction: ButtonInteraction) => {
+        const isMobile = buttonInteraction.customId === `miniboss-mobile-${giveawayId}`;
+        const commandText = isMobile ? mobileCommand : desktopCommand;
+
+        // ✅ Prevent duplicate responses for the same interaction
+        if (interactionCache.has(buttonInteraction.id)) {
+            console.warn(`⚠️ Duplicate button press detected for giveaway ${giveawayId}, ignoring.`);
+            return;
+        }
+        interactionCache.add(buttonInteraction.id);
+
+        try {
+            // ✅ Use `deferUpdate()` to acknowledge the interaction properly
+            await buttonInteraction.deferUpdate().catch(() => {});
+
+            // ✅ Prevent duplicate replies (only allow one response per button)
+            await buttonInteraction.followUp({
+                content: isMobile ? `${commandText}` : `🖥️ **Desktop Command:**\n\`\`\`${commandText}\`\`\``,
+                ephemeral: true,
+            }).catch(() => {});
+        } catch (error) {
+            console.error(`❌ Error handling button interaction for giveaway ${giveawayId}:`, error);
+        }
+    });
+
+    collector.on("end", () => {
+        console.log(`⏳ Button collector expired for giveaway ${giveawayId}`);
     });
 }

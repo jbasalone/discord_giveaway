@@ -11,7 +11,7 @@ export async function execute(message: Message, rawArgs: string[]) {
             return message.reply("❌ This command must be used inside a server.");
         }
 
-        // ✅ Fetch guild settings to check role permissions & mappings
+        // ✅ Fetch guild settings
         const guildId = message.guild.id;
         const guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
@@ -32,35 +32,48 @@ export async function execute(message: Message, rawArgs: string[]) {
             return message.reply("❌ You do not have permission to start giveaways.");
         }
 
-        // ✅ **Fix: Proper Argument Parsing (Handles `--role` correctly)**
+        // ✅ **Fix: Proper Argument Parsing**
         const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
 
-        if (args.length < 3) {
-            return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1 --role VIPGiveaway`");
-        }
-
-        // ✅ Extract **Title**, **Duration**, and **Winner Count**
-        let titleArgs = [];
-        let roleArgIndex = args.findIndex(arg => arg.toLowerCase() === "--role");
         let selectedRole: string | null = null;
+        let hostId: string = message.author.id; // ✅ Default host is the message sender
+        let titleArgs: string[] = [];
+        let durationArg: string | null = null;
+        let winnerCount: number | null = null;
 
-        if (roleArgIndex !== -1) {
-            selectedRole = args[roleArgIndex + 1] ?? null;
-            if (selectedRole) {
-                args.splice(roleArgIndex, 2); // Remove `--role` and role argument
+        // ✅ **Iterate through arguments safely**
+        let i = 0;
+        while (i < args.length) {
+            if (args[i] === "--role" && args[i + 1]) {
+                selectedRole = args[i + 1];
+                i += 2;
+            } else if (args[i] === "--host" && args[i + 1]) {
+                const mentionMatch = args[i + 1].match(/^<@!?(\d+)>$/);
+                hostId = mentionMatch ? mentionMatch[1] : args[i + 1]; // Extract user ID
+                i += 2;
+            } else if (!durationArg && args[i].match(/^\d+[smhd]$/)) {
+                durationArg = args[i];
+                i++;
+            } else if (!winnerCount && /^\d+$/.test(args[i])) {
+                winnerCount = parseInt(args[i], 10);
+                i++;
+            } else {
+                titleArgs.push(args[i]);
+                i++;
             }
         }
 
-        titleArgs = args.slice(0, args.length - 2);
-        const durationArg = args[args.length - 2];
-        const winnerCountArg = args[args.length - 1];
+        // ✅ **Validation Checks**
+        if (!durationArg || !winnerCount || titleArgs.length === 0) {
+            return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1 --role VIPGiveaway --host @User`");
+        }
 
+        const title = titleArgs.join(" "); // ✅ Ensure title is correctly extracted
         const duration = convertToMilliseconds(durationArg);
         if (duration <= 0) {
             return message.reply("❌ Invalid duration format! Example: `30s`, `5m`, `1h`.");
         }
 
-        const winnerCount = parseInt(winnerCountArg, 10);
         if (isNaN(winnerCount) || !Number.isInteger(winnerCount) || winnerCount < 1) {
             return message.reply("❌ Winner count must be a **whole positive number** (e.g., `1`, `5`, `10`).");
         }
@@ -69,12 +82,12 @@ export async function execute(message: Message, rawArgs: string[]) {
         const channel = message.channel as TextChannel;
 
         // ✅ Ensure No Duplicate Giveaway Titles
-        let existingGiveaway = await Giveaway.findOne({ where: { title: titleArgs.join(" "), guildId } });
+        let existingGiveaway = await Giveaway.findOne({ where: { title, guildId } });
         if (existingGiveaway) {
             return message.reply("⚠️ A giveaway with this title **already exists**. Please choose a **different title**.");
         }
 
-        // ✅ Fetch Role Mappings from DB
+        // ✅ **Fetch Role Mappings from DB**
         let roleMappings: Record<string, string> = {};
         try {
             roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
@@ -82,17 +95,17 @@ export async function execute(message: Message, rawArgs: string[]) {
             roleMappings = {};
         }
 
-        // ✅ Resolve Role ID for Ping (From `--role` argument or mappings)
+        // ✅ **Resolve Role ID for Ping (From `--role` argument or mappings)**
         let rolePing = "";
         if (selectedRole) {
             const resolvedRole = roleMappings[selectedRole] || selectedRole;
             rolePing = `<@&${resolvedRole}>`;
         }
 
-        // ✅ Create the Giveaway Embed
+        // ✅ **Create the Giveaway Embed**
         const embed = new EmbedBuilder()
-            .setTitle(`🎉 **${titleArgs.join(" ")}** 🎉`)
-            .setDescription("React with 🎉 to enter!")
+            .setTitle(`🎉 **${title}** 🎉`)
+            .setDescription(`**Host:** <@${hostId}>\n**Server:** ${message.guild?.name}`)
             .setColor("Gold")
             .setFields([
                 { name: "🎟️ Total Participants", value: "0 users", inline: true },
@@ -103,7 +116,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         let giveawayMessage;
         try {
             giveawayMessage = await channel.send({
-                content: rolePing ? `🎉 ${rolePing} A new giveaway has started!` : undefined,
+                content: rolePing ? `🎉 ${rolePing} ${message.guild?.name} Giveaway!` : undefined,
                 embeds: [embed]
             });
         } catch (error) {
@@ -116,7 +129,7 @@ export async function execute(message: Message, rawArgs: string[]) {
             return message.reply("❌ Giveaway message failed to send.");
         }
 
-        // ✅ Create Join/Leave Buttons
+        // ✅ **Create Join/Leave Buttons**
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🎉").setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave ❌").setStyle(ButtonStyle.Danger)
@@ -124,7 +137,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
         await giveawayMessage.edit({ components: [row] });
 
-        // ✅ Ensure transaction is properly handled
+        // ✅ **Ensure transaction is properly handled**
         const transaction = await Giveaway.sequelize?.transaction();
         if (!transaction) {
             console.error("❌ Unable to initialize database transaction.");
@@ -135,19 +148,19 @@ export async function execute(message: Message, rawArgs: string[]) {
         try {
             giveawayData = await Giveaway.create({
                 guildId,
-                host: message.author.id,
+                host: hostId, // ✅ **Host is now properly saved**
                 channelId: channel.id,
                 messageId: giveawayMessage.id,
-                title: titleArgs.join(" "),
-                description: "React with 🎉 to enter!",
-                type: "giveaway", // ✅ FIX: Ensure giveaway type is explicitly set
+                title,
+                description: `**Host:** <@${hostId}>\n**Server:** ${message.guild?.name}`,
+                type: "giveaway",
                 duration,
                 endsAt,
                 participants: JSON.stringify([]),
                 winnerCount
             }, { transaction });
 
-            await transaction.commit(); // ✅ Ensure transaction completes
+            await transaction.commit();
             console.log(`✅ Giveaway successfully saved with messageId: ${giveawayData.get("messageId")}`);
         } catch (error) {
             await transaction.rollback();
@@ -157,7 +170,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
         startLiveCountdown(giveawayData.id, client);
 
-        return message.reply(`✅ Giveaway **"${titleArgs.join(" ")}"** started! React with 🎉 in [this message](${giveawayMessage.url}).`);
+        return message.reply(`✅ Giveaway **"${title}"** started! React with 🎉 in [this message](${giveawayMessage.url}).`);
     } catch (error) {
         console.error("❌ Error starting giveaway:", error);
         return message.reply("❌ Failed to start the giveaway. Please check logs.");

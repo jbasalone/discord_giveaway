@@ -1,15 +1,13 @@
 import { Message, PermissionsBitField } from 'discord.js';
 import { SavedGiveaway } from '../models/SavedGiveaway';
-import { execute as startCustomGiveaway } from '../commands/customGiveaway';
-import { execute as startMinibossGiveaway } from '../commands/minibossGiveaway';
 
 export async function execute(message: Message, args: string[]) {
     if (!message.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-        return message.reply("❌ You need `Manage Messages` permission to start a saved giveaway.");
+        return message.reply("❌ You need `Manage Messages` permission to edit a saved giveaway.");
     }
 
-    if (args.length < 1) {
-        return message.reply("❌ You must specify a template **ID number**.");
+    if (args.length < 2) {
+        return message.reply("❌ Invalid usage! Example: `!ga edit 2 --role @GiveawayPings --field \"Reward: Nitro\"`");
     }
 
     const templateId = parseInt(args[0], 10);
@@ -25,43 +23,48 @@ export async function execute(message: Message, args: string[]) {
             return message.reply(`❌ No saved giveaway template found with ID **${templateId}**.`);
         }
 
-        // ✅ Extract key values from template
-        const giveawayName = template.get("name") as string;
-        const duration = template.get("duration");
-        const winnerCount = template.get("winnerCount");
-        const forceStart = template.get("forceStart") ?? false;
-        const giveawayType = template.get("type") ?? "custom"; // Defaults to "custom"
-        const isMiniboss = giveawayType === "miniboss";
-
-        // ✅ Ensure `extraFields` is always an object
+        // ✅ Extract existing template data
+        let updatedFields: Partial<SavedGiveaway> = {};
+        let roleValue = template.get("role");
+        let role: string | null = typeof roleValue === "string" ? roleValue : null;
         let extraFields: Record<string, string> = {};
         try {
             extraFields = template.get("extraFields") ? JSON.parse(template.get("extraFields") as string) : {};
         } catch (error) {
-            console.error(`❌ Error parsing extraFields for ${giveawayName}:`, error);
+            console.error(`❌ Error parsing extraFields for template ${templateId}:`, error);
         }
 
-        // ✅ Construct argument array correctly
-        const argsToPass = [
-            `"${giveawayName}"`, // Properly format title
-            `${duration}`, // Giveaway Duration
-            ...(isMiniboss ? (forceStart ? ["--force"] : []) : [`${winnerCount}`]), // Force or Winner Count
-            ...Object.entries(extraFields).flatMap(([key, value]) => ["--field", `"${key}: ${value}"`]) // Proper field formatting
-        ];
-
-        // ✅ Determine correct giveaway function to execute
-        if (isMiniboss) {
-            console.log(`🚀 Starting Miniboss Giveaway: ${giveawayName}`);
-            await startMinibossGiveaway(message, argsToPass);
-        } else {
-            console.log(`🚀 Starting Custom Giveaway: ${giveawayName}`);
-            await startCustomGiveaway(message, argsToPass);
+        // ✅ **Process Arguments & Detect Changes**
+        for (let i = 1; i < args.length; i++) {
+            if (args[i] === "--role" && args[i + 1]) {
+                role = args[i + 1].match(/^<@&(\d+)>$/)?.[1] || args[i + 1]; // Extract role ID
+                i++;
+            } else if (args[i] === "--field" && args[i + 1]) {
+                const fieldData = args[i + 1].split(":").map(str => str.trim());
+                if (fieldData.length === 2) {
+                    extraFields[fieldData[0]] = fieldData[1];
+                }
+                i++;
+            } else if (args[i] === "--force") {
+                updatedFields.forceStart = true;
+            } else if (/^\d+[smhd]$/.test(args[i])) {
+                updatedFields.duration = parseInt(args[i], 10) * 1000;
+            } else if (/^\d+$/.test(args[i])) {
+                updatedFields.winnerCount = parseInt(args[i], 10);
+            }
         }
 
-        return message.reply(`✅ Giveaway **"${giveawayName}"** (ID: ${templateId}) has started!`);
+        // ✅ Update template in database
+        await template.update({
+            role,
+            extraFields: JSON.stringify(extraFields),
+            ...updatedFields
+        });
+
+        return message.reply(`✅ Giveaway template **"${template.get("name")}"** (ID: ${templateId}) has been updated!\n📌 **Role:** ${role ? `<@&${role}>` : "Not Set"}\n📋 **Fields:** ${Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields, null, 2) : "None"}`);
 
     } catch (error) {
-        console.error("❌ Error starting giveaway from template:", error);
-        return message.reply("❌ Failed to start the saved giveaway. Please check logs.");
+        console.error("❌ Error editing saved giveaway:", error);
+        return message.reply("❌ Failed to update the saved giveaway. Please check logs.");
     }
 }

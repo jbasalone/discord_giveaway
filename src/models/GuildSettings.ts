@@ -6,8 +6,8 @@ class GuildSettings extends Model {
     public defaultGiveawayRoleId!: string | null;
     public prefix!: string;
     public minibossChannelId!: string | null;
-    public allowedRoles!: string | null;  // ✅ New: JSON for roles that can start GAs
-    public roleMappings!: string | null;  // ✅ New: JSON for role pings
+    public allowedRoles!: string | null;
+    public roleMappings!: string | null;
 }
 
 GuildSettings.init({

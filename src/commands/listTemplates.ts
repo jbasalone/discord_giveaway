@@ -23,19 +23,18 @@ export async function execute(message: Message) {
     templates.forEach((template) => {
       const id = template.get("id") ?? "N/A"; // ✅ Display ID separately
       const name = template.get("name") ?? "Unknown";
-      const type = String(template.get("type") || "custom").toLowerCase(); // ✅ Ensure correct type
+      const type = String(template.get("type") || "custom").toLowerCase(); //
       const isMiniboss = type === "miniboss";
-      const winnerCount = Number(template.get("winnerCount") || 1); // ✅ Ensure it's a number
-      const forceMode = Boolean(template.get("forceStart")); // ✅ Ensure forceStart is always boolean
+      const winnerCount = Number(template.get("winnerCount") || 1); //
+      const forceMode = Boolean(template.get("forceStart")); //
 
-      // ✅ Fix Duration Formatting
       const durationMs = template.get("duration") ?? 0;
       const durationSeconds = Math.floor(durationMs / 1000);
       const durationFormatted = durationSeconds >= 60
           ? `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`
           : `${durationSeconds}s`;
 
-      // ✅ Parse extraFields safely
+
       let extraFields;
       try {
         extraFields = JSON.parse(template.get("extraFields") ?? "{}");
@@ -44,7 +43,6 @@ export async function execute(message: Message) {
         extraFields = {};
       }
 
-      // ✅ Format extra fields properly
       const formattedFields = Object.entries(extraFields)
           .map(([key, value]) => `**${key}**: ${value}`)
           .join("\n");

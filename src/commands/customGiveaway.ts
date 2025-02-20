@@ -1,4 +1,4 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel, PermissionsBitField } from 'discord.js';
+import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel, PermissionsBitField, User } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { GuildSettings } from '../models/GuildSettings';
 import { convertToMilliseconds } from '../utils/convertTime';
@@ -10,7 +10,6 @@ export async function execute(message: Message, rawArgs: string[]) {
         return message.reply("❌ This command must be used inside a server.");
     }
 
-    // ✅ Fetch guild settings to check role permissions & mappings
     const guildId = message.guild.id;
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
@@ -18,7 +17,6 @@ export async function execute(message: Message, rawArgs: string[]) {
         return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
     }
 
-    // ✅ Retrieve Allowed Roles (Who Can Start Giveaways)
     let allowedRoles: string[] = [];
     try {
         allowedRoles = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
@@ -26,40 +24,42 @@ export async function execute(message: Message, rawArgs: string[]) {
         allowedRoles = [];
     }
 
-    // ✅ Ensure User Has Permission
     if (allowedRoles.length > 0 && !message.member?.roles.cache.some(role => allowedRoles.includes(role.id))) {
         return message.reply("❌ You do not have permission to start giveaways.");
     }
 
-    // ✅ **Fix: Proper Argument Parsing (Handles `--role` correctly in any position)**
+    // ✅ **Fix: Proper Argument Parsing (Handles `--role`, `--host`, and `--field` in any position)**
     const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
 
     let fieldArgs: string[] = [];
     let mainArgs: string[] = [];
     let selectedRole: string | null = null;
+    let hostId: string = message.author.id; // ✅ Default host is the giveaway starter
 
-    // ✅ **Separate `--role` and `--field` Arguments**
+    // ✅ **Separate `--role`, `--host`, and `--field` Arguments**
     for (let i = 0; i < args.length; i++) {
         if (args[i] === "--role" && args[i + 1]) {
             selectedRole = args[i + 1];
-            i++; // Skip next argument (role name)
+            i++;
+        } else if (args[i] === "--host" && args[i + 1]) {
+            const mentionMatch = args[i + 1].match(/^<@!?(\d+)>$/);
+            hostId = mentionMatch ? mentionMatch[1] : args[i + 1]; // Extract user ID from mention or use raw ID
+            i++;
         } else if (args[i] === "--field" && args[i + 1]) {
             fieldArgs.push(args[i + 1]);
-            i++; // Skip next argument (field value)
+            i++;
         } else {
             mainArgs.push(args[i]);
         }
     }
 
-    // ✅ **Ensure at least 3 required arguments exist (Title, Duration, Winner Count)**
     if (mainArgs.length < 3) {
-        return message.reply("❌ Invalid usage! Example: `!ga custom \"Super Giveaway\" 30s 1 --field \"Requirement: Level 50+\" --role VIPGiveaway`.");
+        return message.reply("❌ Invalid usage! Example: `!ga custom \"Super Giveaway\" 30s 1 --field \"Requirement: Level 50+\" --role VIPGiveaway --host @User`.");
     }
 
-    // ✅ **Extract & Validate `winnerCount` and `duration`**
     const winnerCountArg = mainArgs.pop()!;
     const durationArg = mainArgs.pop()!;
-    const title = mainArgs.join(" "); // Remaining arguments form the title
+    const title = mainArgs.join(" ");
 
     const duration = convertToMilliseconds(durationArg);
     if (duration <= 0) {
@@ -74,13 +74,11 @@ export async function execute(message: Message, rawArgs: string[]) {
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
     const channel = message.channel as TextChannel;
 
-    // ✅ Ensure No Duplicate Giveaway Titles
     let existingGiveaway = await Giveaway.findOne({ where: { title, guildId } });
     if (existingGiveaway) {
         return message.reply("⚠️ A giveaway with this title already exists. Please use a different title.");
     }
 
-    // ✅ Fetch Role Mappings from DB
     let roleMappings: Record<string, string> = {};
     try {
         roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
@@ -88,14 +86,12 @@ export async function execute(message: Message, rawArgs: string[]) {
         roleMappings = {};
     }
 
-    // ✅ Resolve Role ID for Ping (From `--role` argument or mappings)
     let rolePing = "";
     if (selectedRole) {
         const resolvedRole = roleMappings[selectedRole] || selectedRole;
         rolePing = `<@&${resolvedRole}>`;
     }
 
-    // ✅ **Fix Parsing of Extra Fields**
     let extraFields: Record<string, string> = {};
     for (let field of fieldArgs) {
         const splitIndex = field.indexOf(":");
@@ -106,12 +102,21 @@ export async function execute(message: Message, rawArgs: string[]) {
         }
     }
 
-    // ✅ **Create Giveaway Embed**
+    // ✅ Fetch Host User (Defaults to Giveaway Starter)
+    let hostUser: User | null = null;
+    try {
+        hostUser = await client.users.fetch(hostId);
+    } catch (error) {
+        console.error("❌ Failed to fetch host user:", error);
+    }
+
+    const hostMention = hostUser ? `<@${hostUser.id}>` : `<@${message.author.id}>`;
+
     const embed = new EmbedBuilder()
-        .setTitle(`🎁 **${title}** `)
-        .setDescription("React with 🎉 to enter!")
+        .setTitle(`🎁 **${title}** 🎁`)
+        .setDescription(`**Host:** ${hostMention}\n**Server:** ${message.guild?.name}`)
         .setColor("Blue")
-        .addFields([
+        .setFields([
             { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
             { name: "🏆 Winners", value: `${winnerCount}`, inline: true },
             { name: "🎟️ Participants", value: "0 users", inline: true },
@@ -121,7 +126,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     let giveawayMessage;
     try {
         giveawayMessage = await channel.send({
-            content: rolePing ? `🎉 ${rolePing} A new giveaway has started!` : undefined,
+            content: rolePing ? `🎉 ${rolePing} ${message.guild?.name} Giveaway!` : undefined,
             embeds: [embed]
         });
     } catch (error) {
@@ -130,11 +135,9 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     if (!giveawayMessage.id) {
-        console.error("❌ Giveaway message ID is missing.");
-        return message.reply("❌ Could not start giveaway due to an internal error.");
+        return message.reply("❌ Giveaway message failed to send.");
     }
 
-    // ✅ **Create Join/Leave Buttons**
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🎉").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave ❌").setStyle(ButtonStyle.Danger)
@@ -147,17 +150,17 @@ export async function execute(message: Message, rawArgs: string[]) {
     try {
         giveawayData = await Giveaway.create({
             guildId,
-            host: message.author.id,
+            host: hostUser?.id ?? message.author.id, // ✅ Ensures host defaults to giveaway starter
             channelId: channel.id,
             messageId: giveawayMessage.id,
             title,
-            description: "React with 🎉 to enter!",
-            type: "custom", // ✅ FIX: Ensure giveaway type is explicitly set
+            description: `**Host:** ${hostMention}\n**Server:** ${message.guild?.name}`,
+            type: "custom",
             duration,
             endsAt,
             participants: JSON.stringify([]),
             winnerCount,
-            extraFields: JSON.stringify(extraFields) // ✅ Ensure fields are always stored as a string
+            extraFields: JSON.stringify(extraFields)
         });
     } catch (error) {
         console.error("❌ Failed to save the custom giveaway:", error);
@@ -165,5 +168,5 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     startLiveCountdown(giveawayData.id, message.client);
-    return message.reply(`✅ Custom Giveaway **${title}** started!`);
+    return message.reply(`**${title}** started! Hosted by ${hostMention}.`);
 }

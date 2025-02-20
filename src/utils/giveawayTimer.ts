@@ -4,73 +4,88 @@ import { handleGiveawayEnd } from '../events/giveawayEnd';
 
 export async function startLiveCountdown(giveawayId: number, client: Client) {
     try {
-        const giveaway = await Giveaway.findByPk(giveawayId);
+        console.log(`🔍 Checking countdown for Giveaway ID: ${giveawayId}`);
+
+        let giveaway = await Giveaway.findByPk(giveawayId);
         if (!giveaway) {
             console.warn(`⚠️ Giveaway not found for ID ${giveawayId}. Skipping countdown.`);
             return;
         }
 
-        const channel = client.channels.cache.get(giveaway.get("channelId")) as TextChannel;
+        const channel = client.channels.cache.get(giveaway.get('channelId')) as TextChannel;
         if (!channel) {
             console.warn(`⚠️ Channel not found for Giveaway ID ${giveawayId}.`);
             return;
         }
 
-        let updatedMessage: Message<true> | null = null;
+        let updatedMessage: Message | null = null;
         try {
-            updatedMessage = await channel.messages.fetch(giveaway.get("messageId"));
+            updatedMessage = await channel.messages.fetch(giveaway.get('messageId'));
         } catch (error) {
-            console.error(`❌ Could not fetch giveaway message ${giveaway.get("messageId")}. Skipping update.`);
-            return;
-        }
-
-        if (!updatedMessage || !updatedMessage.embeds.length) {
-            console.warn(`⚠️ Giveaway message missing embeds for ID ${giveawayId}.`);
+            console.error(`❌ Could not fetch giveaway message ${giveaway.get('messageId')}. Skipping update.`);
             return;
         }
 
         const currentTime = Math.floor(Date.now() / 1000);
-        const endsAt = giveaway.get("endsAt");
+        const endsAt = giveaway.get('endsAt');
+        const timeLeft = endsAt - currentTime;
 
-        // ✅ **Check if the giveaway has ended**
-        if (endsAt <= currentTime) {
-            console.log(`✅ Giveaway ${giveawayId} has ended, processing winners immediately.`);
-            await handleGiveawayEnd(client);
-            return; // Stop further updates
+        let embed = EmbedBuilder.from(updatedMessage.embeds[0]);
+
+        // Ensure fields exist before modifying
+        if (!embed.data.fields) embed.setFields([]);
+
+        // Find "⏳ Ends In" field safely
+        const timeRemainingIndex = embed.data.fields?.findIndex(f => f.name.includes('⏳ Ends In')) ?? -1;
+
+        if (timeLeft <= 0) {
+            console.log(`✅ Giveaway ${giveaway.get('id')} has ended, calling handleGiveawayEnd()`);
+
+            // ✅ Set status to "🛑 Ended!"
+            if (timeRemainingIndex !== -1) {
+                embed.spliceFields(timeRemainingIndex, 1, {
+                    name: '⏳ Status',
+                    value: '🛑 Ended!',
+                    inline: true
+                });
+            } else {
+                embed.addFields({
+                    name: '⏳ Status',
+                    value: '🛑 Ended!',
+                    inline: true
+                });
+            }
+
+            await updatedMessage.edit({ embeds: [embed] });
+
+            // ✅ Call handleGiveawayEnd to finalize giveaway
+            await handleGiveawayEnd(client, giveaway.get('id'));
+
+            return;
         }
 
-        // ✅ Fix `extraFields` Parsing
-        const rawExtraFields = giveaway.get("extraFields") ?? "{}";
-        let extraFields;
-        try {
-            extraFields = JSON.parse(rawExtraFields);
-        } catch (error) {
-            console.error(`❌ Error parsing extraFields for Giveaway ${giveawayId}:`, error);
-            extraFields = {};
+        // ✅ Update existing countdown if giveaway is still running
+        if (timeRemainingIndex !== -1) {
+            embed.spliceFields(timeRemainingIndex, 1, {
+                name: '⏳ Ends In',
+                value: `<t:${endsAt}:R>`,
+                inline: true
+            });
+        } else {
+            embed.addFields({
+                name: '⏳ Ends In',
+                value: `<t:${endsAt}:R>`,
+                inline: true
+            });
         }
-
-        // ✅ **Update Embed with Retained Fields**
-        const embed = EmbedBuilder.from(updatedMessage.embeds[0])
-            .setFields([
-                { name: "🎟️ Total Participants", value: `${JSON.parse(giveaway.get("participants") || "[]").length} users`, inline: true },
-                { name: "🏆 Winners", value: `${giveaway.get("winnerCount") ?? "N/A"}`, inline: true },
-                { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-                ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value: String(value), inline: true }))
-            ])
-            .setColor("Gold");
 
         await updatedMessage.edit({ embeds: [embed] });
 
-        // ✅ **Schedule Next Countdown Update**
-        const timeLeft = endsAt - currentTime;
-        if (timeLeft > 0) {
-            setTimeout(() => startLiveCountdown(giveawayId, client), 5000); // Update every 5s
-        } else {
-            console.log(`✅ Timer hit 0 for Giveaway ${giveawayId}, calling handleGiveawayEnd.`);
-            await handleGiveawayEnd(client); // Call ending function immediately
-        }
+        // ✅ Schedule next update only if giveaway is still running
+        const nextUpdateInMs = Math.min(5000, timeLeft * 1000);
+        setTimeout(() => startLiveCountdown(giveawayId, client), nextUpdateInMs);
 
     } catch (error) {
-        console.error("❌ Error updating giveaway countdown:", error);
+        console.error('❌ Critical Error in `startLiveCountdown()`:', error);
     }
 }
