@@ -28,6 +28,7 @@ import { execute as executeCustomGiveaway } from './commands/customGiveaway';
 import { execute as executeMinibossGiveaway } from './commands/minibossGiveaway';
 import { execute as executeSetMinibossChannel } from './commands/setMinibossChannel';
 import { execute as executeListRoles } from './commands/listRoles';
+import { execute as executeListGiveaways } from './commands/checkGiveaway';
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -92,47 +93,50 @@ async function startBot() {
           case 'custom':
             await executeCustomGiveaway(message, args);
             break;
-          case 'miniboss': case 'mb':
-            await executeMinibossGiveaway(message, args);
+          case 'check': case 'listgiveaway': case 'listga': case 'giveaways':
+            await executeListGiveaways(message, args);
             break;
-          case 'setextraentry': case 'setentry':
-            await executeSetExtraEntries(message, args, guildId);
-            break;
-          case 'setminibosschannel': case 'setmbch':
-            await executeSetMinibossChannel(message, args);
-            break;
-          case 'save':
-            await executeSaveTemplate(message, args);
+          case 'delete': case 'deletetemplate':
+            await executeDeleteTemplate(message, args)
             break;
           case 'edit':
             await executeEditTemplate(message, args);
             break;
+          case 'help':
+            await executeHelp(message);
+            break;
           case 'listroles': case 'roles':
             await executeListRoles(message);
-            break;
-          case 'starttemplate': case 'start':
-            await executeStartTemplate(message, args);
             break;
           case 'listtemplates': case 'listtemp': case 'listtemplate':
             await executeListTemplates(message);
             break;
-          case 'deletetemplate':
-            await executeDeleteTemplate(message, args);
-            break;
-          case 'showconfig': case 'config':
-            await executeShowConfig(message, guildId);
+          case 'miniboss': case 'mb':
+            await executeMinibossGiveaway(message, args);
             break;
           case 'reroll':
             await executeReroll(message, args);
             break;
-          case 'help':
-            await executeHelp(message);
+          case 'save':
+            await executeSaveTemplate(message, args);
+            break;
+          case 'showconfig': case 'config':
+            await executeShowConfig(message, guildId);
+            break;
+          case 'setextraentry': case 'setentry':
+            await executeSetExtraEntries(message, args, guildId);
             break;
           case 'setlevel': case 'level':
             await executeSetLevel(message, args);
             break;
           case 'setrole': case 'setroles':
             await executeSetRole(message, args);
+            break;
+          case 'setminibosschannel': case 'setmbch':
+            await executeSetMinibossChannel(message, args);
+            break;
+          case 'starttemplate': case 'start':
+            await executeStartTemplate(message, args);
             break;
           default:
             await message.reply(`❌ Unknown command. Use \`${prefix} ga help\` to see available commands.`);
