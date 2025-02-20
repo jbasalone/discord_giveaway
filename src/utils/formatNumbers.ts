@@ -6,16 +6,15 @@ const NUMBER_LETTER = ["K", "M", "B", "T", "Q", "QQ", "S", "SS", "O", "N", "D", 
 export function numberToPrettyERPGNumber(num: number): string {
     if (num < 1_000) return num.toString();
 
-    let numStr = num.toExponential(2).replace("+", ""); // Convert to scientific notation
-    const [base, exponent] = numStr.split("e");
-
-    const expIndex = Math.floor(parseInt(exponent, 10) / 3) - 1;
+    const exponent = Math.floor(Math.log10(num));
+    const expIndex = Math.floor(exponent / 3) - 1;
 
     if (expIndex < 0 || expIndex >= NUMBER_LETTER.length) {
-        return num.toLocaleString(); // If out of range, return comma-separated format
+        return num.toLocaleString(); // ✅ If out of range, return comma-separated format
     }
 
-    const formattedBase = parseFloat(base).toFixed(2).replace(/\.?0+$/, ""); // Remove trailing zeros
+    const divisor = Math.pow(10, (expIndex + 1) * 3);
+    const formattedBase = (num / divisor).toFixed(2).replace(/\.?0+$/, ""); // ✅ Keep correct number scale.
 
     return `${formattedBase}${NUMBER_LETTER[expIndex]}`;
 }

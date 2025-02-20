@@ -32,10 +32,8 @@ async function getUserMinibossStats(userId: string): Promise<{ userLevel: number
 
 function calculateCoinWinnings(userLevel: number, ttLevel: number) {
     const safeLevel = isNaN(userLevel) ? 100 : userLevel;
-    const safeTT = isNaN(ttLevel) ? 100 : ttLevel;
-
-    const min = Math.floor(0.4 * 125 * safeLevel * safeLevel * (1 + 0.1 * safeTT));
-    const max = Math.floor(125 * safeLevel * safeLevel * (1 + 0.1 * safeTT));
+    const min = Math.floor(0.4 * 125 * safeLevel * safeLevel);
+    const max = Math.floor(125 * safeLevel * safeLevel);
 
     return { min, max };
 }
