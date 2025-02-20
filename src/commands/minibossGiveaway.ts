@@ -21,8 +21,8 @@ async function getUserMinibossStats(userId: string): Promise<{ userLevel: number
         if (!user) return null;
 
         return {
-            userLevel: user.get("userLevel") ?? 100, // ✅ Default to 100 if missing
-            ttLevel: user.get("ttLevel") ?? 100      // ✅ Default to 100 if missing
+            userLevel: user.get("userLevel") ?? 100,
+            ttLevel: user.get("ttLevel") ?? 100
         };
     } catch (error) {
         console.error(`❌ Error retrieving stats for user ${userId}:`, error);
@@ -38,6 +38,18 @@ function calculateCoinWinnings(userLevel: number, ttLevel: number) {
     const max = Math.floor(125 * safeLevel * safeLevel * (1 + 0.1 * safeTT));
 
     return { min, max };
+}
+
+
+function calculateMinimumTTLevel(maxCoins: number): number {
+    let minTT = 1;
+    while (true) {
+        const bankCap = 500_000_000 * Math.pow(minTT, 4) + 100_000 * Math.pow(1, 2);
+        if (bankCap >= maxCoins) {
+            return minTT;
+        }
+        minTT++;
+    }
 }
 
 export async function execute(message: Message, rawArgs: string[]) {
@@ -123,6 +135,10 @@ export async function execute(message: Message, rawArgs: string[]) {
     const formattedMin = numberToPrettyERPGNumber(min);
     const formattedMax = numberToPrettyERPGNumber(max);
 
+
+    // ✅ Determine Minimum TT Level Required
+    const minRequiredTT = calculateMinimumTTLevel(max);
+
     let extraFieldEntries = Object.entries(extraFields).map(([key, value]) => ({
         name: key.trim(),
         value: String(value).trim(),
@@ -140,7 +156,8 @@ export async function execute(message: Message, rawArgs: string[]) {
         .setColor("DarkRed")
         .setFields([
             { name: "🪙 Host Level:", value: `${userLevel}`, inline: true },
-            { name: "🌌 TT Level:", value: `${ttLevel}`, inline: true },
+            { name: "🌌 Host TT Level:", value: `${ttLevel}`, inline: true },
+            { name: "🌌 Min Required TT Level", value: `${minRequiredTT}`, inline: true },
             { name: "💰 Expected Coins", value: `${formattedMin} - ${formattedMax}`, inline: true },
             { name: "🏆 Required Participants", value: `${winnerCount} Required`, inline: true },
             { name: "🎟️ Total Participants", value: "0 users", inline: true },
