@@ -33,6 +33,8 @@ import { execute as executeBlacklistedRoles } from './commands/setBlacklistedRol
 import { execute as executesetChannel } from './commands/setChannel';
 import { execute as executeListMBRoles } from './commands/listMinibossRoles'
 import { execute as executeMyLevel } from './commands/myLevel'
+import { execute as executeSetAccess } from './commands/BotAccess'
+import { execute as executeListAccess } from './commands/listAuthorizedGuilds'
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -108,6 +110,9 @@ async function startBot() {
           case 'help':
             await executeHelp(message);
             break;
+          case 'listaccess':
+            await executeListAccess(message);
+            break;
           case 'listroles': case 'roles':
             await executeListRoles(message);
             break;
@@ -134,6 +139,9 @@ async function startBot() {
             break;
           case 'setblacklist': case 'setblacklistedroles': case 'setbl':
             await executeBlacklistedRoles(message, args, guildId);
+            break;
+          case 'setbotaccess':
+            await executeSetAccess(message, args);
             break;
           case 'setchannel': case 'setch':
             await executesetChannel(message, args);

@@ -1,11 +1,20 @@
 import { Message, PermissionsBitField } from 'discord.js';
 import { GuildSettings } from '../models/GuildSettings';
 import { MinibossRoles } from '../models/MinibossRoles';
+import { BotAccess } from '../models/BotAccess';
+
 
 export async function execute(message: Message, args: string[]) {
   if (!message.guild) {
     return message.reply("❌ This command must be used inside a server.");
   }
+
+  const isAuthorized = await BotAccess.findOne({ where: { guildId: message.guild.id } });
+
+  if (!isAuthorized) {
+    return message.reply("❌ This bot is **not authorized** for this server. Ask the bot owner to approve it.");
+  }
+
 
   if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
     return message.reply("❌ You need `Administrator` permissions to set roles.");
