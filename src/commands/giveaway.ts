@@ -12,6 +12,7 @@ import { GuildSettings } from '../models/GuildSettings';
 import { convertToMilliseconds } from '../utils/convertTime';
 import { startLiveCountdown } from '../utils/giveawayTimer';
 import { client } from '../index';
+import { AllowedGiveawayChannels } from "../models/AllowedGiveawayChannels"; // Import model
 
 export async function execute(message: Message, rawArgs: string[]) {
     try {
@@ -19,7 +20,7 @@ export async function execute(message: Message, rawArgs: string[]) {
             return message.reply("❌ This command must be used inside a server.");
         }
 
-        // ✅ Fetch guild settings
+        //  Fetch guild settings
         const guildId = message.guild.id;
         const guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
@@ -27,7 +28,7 @@ export async function execute(message: Message, rawArgs: string[]) {
             return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
         }
 
-        // ✅ Retrieve Allowed Roles (Who Can Start Giveaways)
+        // Retrieve Allowed Roles (Who Can Start Giveaways)
         let allowedRoles: string[] = [];
         try {
             allowedRoles = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
@@ -35,12 +36,17 @@ export async function execute(message: Message, rawArgs: string[]) {
             allowedRoles = [];
         }
 
-        // ✅ Ensure User Has Permission
+        // Ensure User Has Permission
         if (allowedRoles.length > 0 && !message.member?.roles.cache.some(role => allowedRoles.includes(role.id))) {
             return message.reply("❌ You do not have permission to start giveaways.");
         }
+        // Ensure Giveaways Start in Allowed Channels
+        const allowedChannel = await AllowedGiveawayChannels.findOne({ where: { guildId, channelId: message.channel.id } });
 
-        // ✅ **Fix: Proper Argument Parsing**
+        if (!allowedChannel) {
+            return message.reply("❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
+        }
+
         const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
 
         let selectedRole: string | null = null;

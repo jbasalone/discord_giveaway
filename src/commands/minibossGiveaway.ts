@@ -11,6 +11,9 @@ import { SavedGiveaway } from '../models/SavedGiveaway';
 import { UserProfile } from '../models/UserProfile';
 import { startLiveCountdown } from '../utils/giveawayTimer';
 import { numberToPrettyERPGNumber } from '../utils/formatNumbers';
+import { AllowedGiveawayChannels } from "../models/AllowedGiveawayChannels";
+import { MinibossRoles } from "../models/MinibossRoles";
+
 
 async function getUserMinibossStats(userId: string): Promise<{ userLevel: number, ttLevel: number } | null> {
     try {
@@ -53,6 +56,22 @@ function calculateMinimumTTLevel(maxCoins: number): number {
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) {
         return message.reply("❌ This command must be used inside a server.");
+    }
+
+    let guildId = message.guild.id
+
+    const allowedRoles = await MinibossRoles.findAll({ where: { guildId } });
+    const allowedRoleIds = allowedRoles.map(role => role.roleId);
+
+    if (!message.member?.roles.cache.some(role => allowedRoleIds.includes(role.id))) {
+        return message.reply("❌ You **do not have permission** to start Miniboss Giveaways.");
+    }
+
+
+    const allowedChannel = await AllowedGiveawayChannels.findOne({ where: { guildId, channelId: message.channel.id } });
+
+    if (!allowedChannel) {
+        return message.reply("❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
     }
 
     console.log("🔍 [DEBUG] Raw Args:", rawArgs);

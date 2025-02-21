@@ -1,5 +1,6 @@
 import { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
+import { BlacklistedRoles } from '../models/BlacklistedRoles';
 import { cache } from '../utils/giveawayCache';
 
 const userCooldowns = new Map<string, number>();
@@ -11,7 +12,12 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     const isJoining = interaction.customId.startsWith('join-');
     const userId = interaction.user.id;
+    const guildId = interaction.guild?.id;
     const giveawayMessageId = interaction.customId.split('-')[1];
+
+    if (!guildId) {
+      return await interaction.reply({ content: '❌ An error occurred. Guild ID missing.', ephemeral: true });
+    }
 
     let giveaway = await Giveaway.findOne({ where: { messageId: giveawayMessageId } });
 
@@ -45,6 +51,16 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       return await interaction.reply({ content: '⚠️ You are not in this giveaway!', ephemeral: true });
     }
 
+    // ✅ **Check if user has a blacklisted role**
+    const blacklistedRoles = await BlacklistedRoles.findAll({ where: { guildId } });
+    const blacklistedRoleIds = blacklistedRoles.map(entry => entry.roleId);
+
+    const member = await interaction.guild?.members.fetch(userId).catch(() => null);
+    if (member && member.roles.cache.hasAny(...blacklistedRoleIds)) {
+      return await interaction.reply({ content: "❌ You are **blacklisted** from joining giveaways!", ephemeral: true });
+    }
+
+    // ✅ If user is not blacklisted, process join/leave
     if (isJoining) {
       participants.push(userId);
     } else {

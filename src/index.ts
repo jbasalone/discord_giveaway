@@ -29,6 +29,9 @@ import { execute as executeMinibossGiveaway } from './commands/minibossGiveaway'
 import { execute as executeSetMinibossChannel } from './commands/setMinibossChannel';
 import { execute as executeListRoles } from './commands/listRoles';
 import { execute as executeListGiveaways } from './commands/checkGiveaway';
+import { execute as executeBlacklistedRoles } from './commands/setBlacklistedRoles';
+import { execute as executesetChannel } from './commands/setChannel';
+import { execute as executeListMBRoles } from './commands/listMinibossRoles'
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -54,7 +57,6 @@ async function startBot() {
       console.log(`✅ Bot is online! Logged in as ${client.user?.tag}`);
 
       setInterval(async () => {
-        console.log("🔍 Checking for expired giveaways...");
 
         const currentTime = Math.floor(Date.now() / 1000);
         const expiredGiveaways = await Giveaway.findAll({
@@ -108,6 +110,9 @@ async function startBot() {
           case 'listroles': case 'roles':
             await executeListRoles(message);
             break;
+          case 'listmbroles':
+            await executeListMBRoles(message, guildId);
+            break;
           case 'listtemplates': case 'listtemp': case 'listtemplate':
             await executeListTemplates(message);
             break;
@@ -122,6 +127,12 @@ async function startBot() {
             break;
           case 'showconfig': case 'config':
             await executeShowConfig(message, guildId);
+            break;
+          case 'setblacklist': case 'setblacklistedroles': case 'setbl':
+            await executeBlacklistedRoles(message, args, guildId);
+            break;
+          case 'setchannel': case 'setch':
+            await executesetChannel(message, args);
             break;
           case 'setextraentry': case 'setentry':
             await executeSetExtraEntries(message, args, guildId);

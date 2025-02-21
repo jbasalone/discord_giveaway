@@ -1,5 +1,5 @@
-import { Message, PermissionsBitField, TextChannel } from "discord.js";
-import { GuildSettings } from "../models/GuildSettings";
+import { Message, PermissionsBitField, TextChannel, GuildChannel } from 'discord.js';
+import { AllowedGiveawayChannels } from '../models/AllowedGiveawayChannels';
 
 export async function execute(message: Message, args: string[]) {
     if (!message.guild) {
@@ -7,28 +7,26 @@ export async function execute(message: Message, args: string[]) {
     }
 
     if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply("❌ You need **Administrator** permissions to set a giveaway channel.");
+        return message.reply("❌ You need **Administrator** permissions to manage allowed channels.");
     }
 
-    const botMember = message.guild.members.me;
-    if (!botMember || !botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-        return message.reply("❌ I don't have permission to **Manage Channels** in this server.");
+    const guildId = message.guild.id;
+    const channel = message.mentions.channels.first() || message.channel;
+
+    //  Ensure channel is a GuildChannel and has a name
+    if (!channel || !(channel instanceof TextChannel)) {
+        return message.reply("❌ Please specify a valid **text channel** for giveaways.");
     }
 
-    const channel = message.mentions.channels.first() as TextChannel;
-    if (!channel || !channel.isTextBased()) {
-        return message.reply("❌ Please **mention a valid text channel**.");
+    if (args[0] === "add") {
+        await AllowedGiveawayChannels.create({ guildId, channelId: channel.id });
+        return message.reply(`✅ Added **#${channel.name}** as an allowed giveaway channel.`);
     }
 
-    try {
-        await GuildSettings.upsert({
-            guildId: message.guild.id,
-            giveawayChannel: channel.id
-        });
-
-        return message.reply(`✅ **Giveaway channel has been set to** ${channel}.`);
-    } catch (error) {
-        console.error("❌ Error setting giveaway channel:", error);
-        return message.reply("❌ **Failed to set the giveaway channel.** Please try again.");
+    if (args[0] === "remove") {
+        await AllowedGiveawayChannels.destroy({ where: { guildId, channelId: channel.id } });
+        return message.reply(`✅ Removed **#${channel.name}** from allowed giveaway channels.`);
     }
+
+    return message.reply("❌ Usage: `!ga setchannel add #channel` or `!ga setchannel remove #channel`.");
 }

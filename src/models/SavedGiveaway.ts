@@ -3,7 +3,7 @@ import { sequelize } from '../database';
 
 export class SavedGiveaway extends Model {
     public id!: number;
-    declare public guildId: number;
+    public guildId!: number;
     public name!: string;
     public title!: string;
     public description!: string;
@@ -12,6 +12,7 @@ export class SavedGiveaway extends Model {
     public extraFields?: string;
     public type!: 'custom' | 'miniboss' | 'giveaway';
     public forceStart!: boolean;
+    public role!: string;
     public host!: string;
 }
 
@@ -29,7 +30,7 @@ SavedGiveaway.init(
         name: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: true,
+            unique: "unique_saved_giveaway_name",  // ✅ Ensures only one unique constraint
         },
         title: {
             type: DataTypes.STRING,
@@ -77,5 +78,12 @@ SavedGiveaway.init(
         tableName: 'saved_giveaways',
         timestamps: false,
         freezeTableName: true,
+        indexes: [
+            {
+                unique: true,
+                fields: ['name'], // ✅ Explicitly set index to avoid duplicates
+                name: "unique_saved_giveaway_name",
+            }
+        ]
     }
 );

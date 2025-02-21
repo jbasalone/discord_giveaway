@@ -3,7 +3,10 @@ import { Giveaway } from '../models/Giveaway';
 import { GuildSettings } from '../models/GuildSettings';
 import { convertToMilliseconds } from '../utils/convertTime';
 import { startLiveCountdown } from '../utils/giveawayTimer';
+import { AllowedGiveawayChannels } from "../models/AllowedGiveawayChannels";
+
 import { client } from '../index';
+
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) {
@@ -28,7 +31,14 @@ export async function execute(message: Message, rawArgs: string[]) {
         return message.reply("❌ You do not have permission to start giveaways.");
     }
 
-    // ✅ Extract the first 3 required arguments (Title, Duration, Winner Count)
+    const allowedChannel = await AllowedGiveawayChannels.findOne({ where: { guildId, channelId: message.channel.id } });
+
+    if (!allowedChannel) {
+        return message.reply("❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
+    }
+
+
+    // Extract the first 3 required arguments (Title, Duration, Winner Count)
     let title = "";
     let duration = "";
     let winnerCount = "";
