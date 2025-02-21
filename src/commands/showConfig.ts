@@ -25,19 +25,19 @@ export async function execute(message: Message, guildId?: string) {
       return message.reply("❌ No settings found for this server.");
     }
 
-    // ✅ Retrieve Core Settings
+    //  Retrieve Core Settings
     const defaultRoleId = guildSettings.get("defaultGiveawayRoleId") ?? null;
     const minibossChannelId = guildSettings.get("minibossChannelId") ?? null;
     const defaultRoleMention = defaultRoleId ? `<@&${defaultRoleId}>` : "❌ Not Set";
     const minibossChannelMention = minibossChannelId ? `<#${minibossChannelId}>` : "❌ Not Set";
 
-    // ✅ Fetch Allowed Giveaway Channels
+    //  Fetch Allowed Giveaway Channels
     const allowedChannels = await AllowedGiveawayChannels.findAll({ where: { guildId } });
     const allowedChannelsText = allowedChannels.length > 0
         ? allowedChannels.map(entry => `<#${entry.get("channelId")}>`).join(", ")
         : "❌ No restrictions (all channels allowed).";
 
-    // ✅ Fetch Allowed Roles
+    // Fetch Allowed Roles
     let allowedRoles: string[] = [];
     try {
       allowedRoles = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
@@ -48,25 +48,31 @@ export async function execute(message: Message, guildId?: string) {
         ? allowedRoles.map(roleId => `<@&${roleId}>`).join(", ")
         : "❌ No restrictions set.";
 
-    // ✅ Fetch Miniboss Allowed Roles
+    //  Fetch Miniboss Allowed Roles
     const minibossRoles = await MinibossRoles.findAll({ where: { guildId } });
+
     const minibossRolesText = minibossRoles.length > 0
-        ? minibossRoles.map(entry => `<@&${entry.roleId}>`).join(", ")
+        ? minibossRoles
+            .map(entry => {
+              const roleId = entry.get("roleId") ?? null;
+              return roleId ? `<@&${roleId}>` : "❌ Unknown Role";
+            })
+            .join(", ")
         : "❌ No roles assigned to start Miniboss giveaways.";
 
-    // ✅ Fetch Blacklisted Roles
+    //  Fetch Blacklisted Roles
     const blacklistedRoles = await BlacklistedRoles.findAll({ where: { guildId } });
     const blacklistedRolesText = blacklistedRoles.length > 0
         ? blacklistedRoles.map(entry => `<@&${entry.get("roleId")}>`).join(", ")
         : "❌ No blacklisted roles.";
 
-    // ✅ Fetch Extra Entry Roles
+    //  Fetch Extra Entry Roles
     const extraEntries = await ExtraEntries.findAll({ where: { guildId } });
     const extraEntriesText = extraEntries.length > 0
         ? extraEntries.map(entry => `<@&${entry.get("roleId")}>: **+${entry.get("bonusEntries")} Entries**`).join("\n")
         : "❌ No extra entry roles set.";
 
-    // ✅ Fetch Role Mappings
+    //  Fetch Role Mappings
     let roleMappings: Record<string, string> = {};
     try {
       roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
@@ -77,7 +83,7 @@ export async function execute(message: Message, guildId?: string) {
         ? Object.entries(roleMappings).map(([roleName, roleId]) => `**${roleName}**: <@&${roleId}>`).join("\n")
         : "❌ No ping roles set.";
 
-    // ✅ Create Compact Embed
+    // Create Compact Embed
     const embed = new EmbedBuilder()
         .setTitle(`⚙️ Server Giveaway Configuration`)
         .setDescription(`📜 **Server Settings for** **${message.guild.name}**`)

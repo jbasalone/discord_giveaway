@@ -32,6 +32,7 @@ import { execute as executeListGiveaways } from './commands/checkGiveaway';
 import { execute as executeBlacklistedRoles } from './commands/setBlacklistedRoles';
 import { execute as executesetChannel } from './commands/setChannel';
 import { execute as executeListMBRoles } from './commands/listMinibossRoles'
+import { execute as executeMyLevel } from './commands/myLevel'
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -118,6 +119,9 @@ async function startBot() {
             break;
           case 'miniboss': case 'mb':
             await executeMinibossGiveaway(message, args);
+            break;
+          case 'mylevel':
+            await executeMyLevel(message);
             break;
           case 'reroll':
             await executeReroll(message, args);
