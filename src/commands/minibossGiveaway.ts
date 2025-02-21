@@ -61,12 +61,21 @@ export async function execute(message: Message, rawArgs: string[]) {
     let guildId = message.guild.id
 
     const allowedRoles = await MinibossRoles.findAll({ where: { guildId } });
-    const allowedRoleIds = allowedRoles.map(role => role.roleId);
+    const allowedRoleIds = allowedRoles.map(role => role.get('roleId')).filter(Boolean);
 
-    if (!message.member?.roles.cache.some(role => allowedRoleIds.includes(role.id))) {
-        return message.reply("❌ You **do not have permission** to start Miniboss Giveaways.");
+
+    if (allowedRoleIds.length === 0) {
+        console.warn("⚠️ No Miniboss roles found in DB for this guild.");
     }
 
+    const hasPermission = message.member?.roles.cache.some(role => allowedRoleIds.includes(role.id));
+
+    console.log("🔍 [DEBUG] Allowed Miniboss Role IDs:", allowedRoleIds);
+    console.log("🔍 [DEBUG] User Roles:", message.member?.roles.cache.map(r => r.id));
+
+    if (!hasPermission) {
+        return message.reply("❌ You **do not have permission** to start Miniboss Giveaways.");
+    }
 
     const allowedChannel = await AllowedGiveawayChannels.findOne({ where: { guildId, channelId: message.channel.id } });
 
