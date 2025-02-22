@@ -5,18 +5,16 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    Interaction
+    Interaction,
+    PermissionsBitField
 } from 'discord.js';
 
 import { Giveaway } from '../models/Giveaway';
 import { GuildSettings } from '../models/GuildSettings';
 
 // ✅ Store restricted users in memory (temporary cache)
-const restrictedUsers = new Map<string, string>(); // giveawayId -> restrictedUser
+const restrictedUsers = new Map<string, string>();
 
-/**
- * Handles Miniboss Giveaway & Cooldown Detection.
- */
 export async function handleMinibossCommand(
     client: Client,
     giveawayId: string | number,
@@ -49,7 +47,6 @@ export async function handleMinibossCommand(
         return;
     }
 
-    // ✅ Fetch Miniboss Channel
     const guildSettings = await GuildSettings.findOne({ where: { guildId: guild.id } });
     const minibossChannelId = guildSettings?.get("minibossChannelId") as string;
 
@@ -66,15 +63,28 @@ export async function handleMinibossCommand(
 
     console.log(`📌 [DEBUG] Announcing Miniboss Winners in ${minibossChannelId}`);
 
-    // ✅ **Exclude host from participant list immediately**
     let nonHostParticipants = participants.filter(id => id !== hostId);
     console.log(`👥 [DEBUG] Non-host Participants: ${nonHostParticipants.length} (Host Excluded)`);
 
-    // ✅ **Function to send command buttons**
+    async function updateChannelAccess(users: string[], grant: boolean) {
+        for (const userId of users) {
+            try {
+                await minibossChannel.permissionOverwrites.edit(userId, {
+                    ViewChannel: grant,
+                    SendMessages: grant
+                });
+                console.log(`🔑 [DEBUG] ${grant ? "Granted" : "Removed"} channel access for ${userId}`);
+            } catch (error) {
+                console.error(`❌ Error updating channel permissions for ${userId}:`, error);
+            }
+        }
+    }
+
+    let commandText = "";
     async function sendCommandButtons() {
         const botId = "555955826880413696";
         const winnerMentions = nonHostParticipants.map(id => `<@${id}>`).join(" ");
-        const commandText = `<@${botId}> miniboss ${winnerMentions}`;
+        commandText = `<@${botId}> miniboss ${winnerMentions}`;
 
         const initialRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`desktop-command-${giveawayId}`).setLabel("🖥️ Desktop Cmd").setStyle(ButtonStyle.Primary),
@@ -86,34 +96,53 @@ export async function handleMinibossCommand(
             components: [initialRow],
         });
 
-        return commandText;
+        console.log(`✅ [DEBUG] Stored commandText: ${commandText}`);
     }
 
-    // ✅ **Always Announce Winners**
     await minibossChannel.send({
         content: `🎉 **Miniboss Giveaway Ended!** 🎉\n🏆 **Winners:** ${nonHostParticipants.map(id => `<@${id}>`).join(", ")}`,
     });
 
-    const commandText = await sendCommandButtons();
+    await updateChannelAccess(nonHostParticipants, true);
+    await sendCommandButtons();
 
-    // ✅ **Cooldown & Overcap Message Detection**
     const restrictionCollector = minibossChannel.createMessageCollector({
         filter: (msg: Message) => {
+            console.log(`📌 [DEBUG] Checking message for restrictions:`, msg.content, msg.author.id);
+
             const isFromBot = msg.author.id === "555955826880413696";
             const isCooldown = msg.embeds.length > 0 && msg.embeds[0]?.title?.toLowerCase()?.includes("fight with a boss recently");
-            const isOverCap = msg.content.toLowerCase().includes("you can't do this because") && msg.content.toLowerCase().includes("too many coins");
+            const isOverCap = msg.content.toLowerCase().includes("you can't do this because") &&
+                msg.content.toLowerCase().includes("too many coins");
             const isMinibossWin = msg.embeds.length > 0 && msg.embeds[0]?.title?.includes("HAS BEEN DEFEATED!");
+
             if (isMinibossWin) {
-                console.log(`🏆 Miniboss success detected! Ending restriction monitoring.`);
+                console.log(`🏆 Miniboss success detected! Revoking access & ending process.`);
+                updateChannelAccess(nonHostParticipants, false);
                 restrictionCollector.stop();
+                return false;
             }
+
             return isFromBot && (isCooldown || isOverCap);
         },
         time: 600000,
     });
 
     restrictionCollector.on("collect", async (msg: Message) => {
-        let restrictedUser = msg.embeds[0]?.author?.name?.split(" — ")[0] || msg.content.match(/you can't do this because (.+?) would have too many coins/i)?.[1];
+        console.log(`🔍 Restriction Detected! Processing action...`);
+
+        let restrictedUser = null;
+        if (msg.embeds.length > 0) {
+            const embedAuthor = msg.embeds[0].author?.name || "";
+            const match = embedAuthor.match(/^(.+?) — cooldown/);
+            if (match) {
+                restrictedUser = match[1];
+            }
+        }
+        const overCapMatch = msg.content.match(/you can't do this because (.+?) would have too many coins/i);
+        if (overCapMatch) {
+            restrictedUser = overCapMatch[1];
+        }
 
         if (!restrictedUser) return;
 
@@ -126,27 +155,22 @@ export async function handleMinibossCommand(
         );
 
         await minibossChannel.send({
-            content: `⚠️ <@${hostId}>, **${restrictedUser}** is restricted! Choose an action:`,
+            content: `⚠️ <@${hostId}>, **${restrictedUser}** is holding us all up Choose an action:`,
             components: [actionRow],
         });
     });
 
-    // ✅ Button Handling
     const buttonCollector = minibossChannel.createMessageComponentCollector({ time: 300000 });
 
     buttonCollector.on("collect", async (interaction: Interaction) => {
         if (!interaction.isButton()) return;
-
-        if (interaction.user.id !== hostId) {
-            await interaction.reply({ content: "❌ You are **not the host**!", ephemeral: true });
-            return;
-        }
-
         await interaction.deferUpdate();
 
         if (interaction.customId.startsWith(`desktop-command-`) || interaction.customId.startsWith(`mobile-command-`)) {
             await interaction.followUp({
-                content: interaction.customId.startsWith(`desktop-command-`) ? `\`\`\`${commandText}\`\`\`` : `${commandText}`,
+                content: interaction.customId.startsWith(`desktop-command-`)
+                    ? `\`\`\`${commandText}\`\`\``
+                    : `${commandText}`,
                 ephemeral: true,
             });
             return;
@@ -156,12 +180,13 @@ export async function handleMinibossCommand(
             let restrictedUser = restrictedUsers.get(giveawayId);
             if (!restrictedUser) return;
 
-            nonHostParticipants = nonHostParticipants.filter(id => !id.toLowerCase().includes(restrictedUser.toLowerCase()));
+            nonHostParticipants = nonHostParticipants.filter(id => id !== restrictedUser);
 
             await minibossChannel.send({
                 content: `🔄 **New Winners:** ${nonHostParticipants.map(id => `<@${id}>`).join(", ")}`,
             });
 
+            await updateChannelAccess([restrictedUser], false);
             restrictedUsers.delete(giveawayId);
             await sendCommandButtons();
         }
@@ -170,15 +195,13 @@ export async function handleMinibossCommand(
             await minibossChannel.send({ content: `⏳ **Waiting 1 minute...**` });
 
             setTimeout(async () => {
-                await minibossChannel.send({
-                    content: `⏳ **1 Minute is up!** <@${hostId}>, you can now reroll.`,
-                    components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Confirm Reroll").setStyle(ButtonStyle.Primary))],
-                });
+                await minibossChannel.send({ content: `⏳ **1 Minute is up!** <@${hostId}>, you can now reroll.` });
             }, 60000);
         }
 
         if (interaction.customId === `end-ga-${giveawayId}`) {
             await minibossChannel.send({ content: `❌ **Miniboss Giveaway has been canceled by the host.**` });
+            await updateChannelAccess(nonHostParticipants, false);
             buttonCollector.stop();
             restrictionCollector.stop();
         }
