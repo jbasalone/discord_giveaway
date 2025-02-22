@@ -32,11 +32,16 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
 
         let embed = EmbedBuilder.from(updatedMessage.embeds[0]);
 
+        // ✅ Fetch latest participant count from the database
+        let participants: string[] = JSON.parse(giveaway.get('participants') || '[]');
+        const participantCount = participants.length;
+
         // Ensure fields exist before modifying
         if (!embed.data.fields) embed.setFields([]);
 
         // Find "⏳ Ends In" field safely
         const timeRemainingIndex = embed.data.fields?.findIndex(f => f.name.includes('⏳ Ends In')) ?? -1;
+        const participantsIndex = embed.data.fields?.findIndex(f => f.name.includes('🎟️ Total Participants')) ?? -1;
 
         if (timeLeft <= 0) {
             console.log(`✅ Giveaway ${giveaway.get('id')} has ended, calling handleGiveawayEnd()`);
@@ -64,7 +69,7 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
             return;
         }
 
-        // ✅ Update existing countdown if giveaway is still running
+        // ✅ Update only the "Ends In" and "Total Participants" fields
         if (timeRemainingIndex !== -1) {
             embed.spliceFields(timeRemainingIndex, 1, {
                 name: '⏳ Ends In',
@@ -75,6 +80,21 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
             embed.addFields({
                 name: '⏳ Ends In',
                 value: `<t:${endsAt}:R>`,
+                inline: true
+            });
+        }
+
+        // ✅ Ensure "Total Participants" field is updated properly
+        if (participantsIndex !== -1) {
+            embed.spliceFields(participantsIndex, 1, {
+                name: '🎟️ Total Participants',
+                value: `${participantCount} users`,
+                inline: true
+            });
+        } else {
+            embed.addFields({
+                name: '🎟️ Total Participants',
+                value: `${participantCount} users`,
                 inline: true
             });
         }

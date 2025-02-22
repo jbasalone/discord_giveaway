@@ -8,6 +8,7 @@ const cooldownTime = 10 * 1000;
 
 export async function executeJoinLeave(interaction: ButtonInteraction) {
   try {
+
     if (!interaction.customId.startsWith('join-') && !interaction.customId.startsWith('leave-')) return;
 
     const isJoining = interaction.customId.startsWith('join-');
@@ -90,10 +91,16 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     await interaction.message.edit({ embeds: [embed] });
 
-    return await interaction.reply({
+    // ✅ **Prevent "Interaction Failed" and send confirmation**
+    await interaction.deferUpdate().catch(() => {
+      console.error("❌ [ERROR] Failed to defer update.");
+    });
+
+    // ✅ Send ephemeral message after deferring
+    await interaction.followUp({
       content: isJoining ? '✅ You have successfully joined the giveaway!' : '✅ You have left the giveaway.',
       ephemeral: true
-    });
+    }).catch(() => console.error("❌ [ERROR] Failed to send follow-up message."));
 
   } catch (error) {
     console.error('❌ Error handling giveaway join/leave:', error);

@@ -85,7 +85,8 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     console.log("🔍 [DEBUG] Raw Args:", rawArgs);
 
-    let templateId = null;
+    let templateId: number | null = null;
+    let savedGiveaway: SavedGiveaway | null = null;
     let title = "Unknown Giveaway";
     let duration = 60;
     let winnerCount = 1;
@@ -97,7 +98,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         templateId = parseInt(rawArgs.shift()!, 10);
         console.log(`📌 Using Saved Template ID: ${templateId}`);
 
-        const savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } });
+        savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } }); // ✅ Assign to the global `savedGiveaway`
 
         if (!savedGiveaway) {
             return message.reply(`❌ No saved giveaway found with ID: ${templateId}`);
@@ -172,7 +173,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     }));
 
     if (roleId) {
-        await channel.send(`<@&${roleId}> **MB Giveaway - Level ${userLevel} (TT ${ttLevel})** 🎊`);
+        await channel.send(`<${roleId}> **MB Giveaway - Level ${userLevel} (TT ${ttLevel})** 🎊`);
     }
 
     // ✅ Create Embed
@@ -182,7 +183,6 @@ export async function execute(message: Message, rawArgs: string[]) {
         .setColor("DarkRed")
         .setFields([
             { name: "🪙 Host Level:", value: `${userLevel}`, inline: true },
-            { name: "🌌 Host TT Level:", value: `${ttLevel}`, inline: true },
             { name: "🌌 Min Required TT Level", value: `${minRequiredTT}`, inline: true },
             { name: "💰 Expected Coins", value: `${formattedMin} - ${formattedMax}`, inline: true },
             { name: "🏆 Required Participants", value: `${winnerCount} Required`, inline: true },
@@ -192,6 +192,9 @@ export async function execute(message: Message, rawArgs: string[]) {
         ]);
 
     let giveawayMessage = await channel.send({ embeds: [embed] });
+    const isForced = savedGiveaway ? Boolean(Number(savedGiveaway.get("forceStart"))) : false;
+    console.log(`📌 [DEBUG] Saved Template forceStart: ${savedGiveaway?.get("forceStart")} (isForced: ${isForced})`);
+
 
     // ✅ Save Giveaway
     const createdGiveaway = await Giveaway.create({
@@ -206,7 +209,8 @@ export async function execute(message: Message, rawArgs: string[]) {
         endsAt,
         participants: JSON.stringify([]),
         winnerCount,
-        extraFields: JSON.stringify(extraFields)
+        extraFields: JSON.stringify(extraFields),
+        forceStart: isForced,
     });
 
     const giveawayId = createdGiveaway.id;

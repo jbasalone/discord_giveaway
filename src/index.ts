@@ -177,15 +177,22 @@ async function startBot() {
         if (interaction.isStringSelectMenu() && interaction.customId === "help-menu") {
           await handleHelpSelection(interaction);
         } else if (interaction.isButton()) {
+
           if (interaction.customId.startsWith("miniboss-")) {
             const giveawayId = interaction.customId.split("-").pop();
-
             if (!giveawayId) {
               return interaction.reply({ content: "❌ Invalid Miniboss Giveaway ID.", ephemeral: true });
             }
 
-            // ✅ Now pass both `client` and `interaction` to edit the message instead of sending a new one
-            await handleMinibossCommand(client, parseInt(giveawayId), interaction);
+            const giveaway = await Giveaway.findByPk(parseInt(giveawayId));
+            if (!giveaway) {
+              return interaction.reply({ content: "❌ Giveaway not found.", ephemeral: true });
+            }
+
+            const participants = JSON.parse(giveaway.get("participants") ?? "[]");
+
+            console.log(`🔍 Calling handleMinibossCommand (Participants: ${participants.length})`);
+            await handleMinibossCommand(client, parseInt(giveawayId), participants);
           } else {
             await executeJoinLeave(interaction);
           }
