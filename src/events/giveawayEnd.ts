@@ -65,10 +65,9 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       console.warn(`⚠️ No participants found for giveaway ${giveawayId}.`);
     }
 
-    // ✅ **Fix: Ensure `forceStart` is correctly handled as a Boolean**
     const isForced = Boolean(Number(giveaway.get("forceStart")));
 
-    console.log(`📌 Debug: forceStart = ${giveaway.get("forceStart")} (isForced: ${isForced})`);
+
     // ✅ **Miniboss Giveaway Logic**
     if (giveaway.get("type") === "miniboss") {
       console.log(`🔍 Miniboss Giveaway Detected! Checking participant count... (Participants: ${participants.length}, isForced: ${isForced})`);
@@ -82,12 +81,11 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
         return;
       }
     } else {
-      // ✅ **Standard Giveaway: Process Winners Normally**
+
       let winners = "No winners.";
       let winnerList: string[] = [];
       const maxWinners = Number(giveaway.get("winnerCount"));
 
-      // ✅ **Fetch Extra Entries Data only if giveaway allows it**
       let useExtraEntries = false;
       try {
         const extraFields = JSON.parse(giveaway.get("extraFields") ?? "{}");
@@ -96,7 +94,7 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
         useExtraEntries = false;
       }
 
-      const shouldUseExtraEntries = useExtraEntries || giveaway.get("type") === "giveaway";
+      const shouldUseExtraEntries = useExtraEntries || giveaway.get("type") === "giveaway" || giveaway.get("type") === "custom";
       const participantsWithWeights: string[] = [];
 
       if (shouldUseExtraEntries) {
@@ -135,7 +133,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
       winners = winnerList.length > 0 ? winnerList.map(id => `<@${id}>`).join(", ") : "No winners.";
 
-      // ✅ **Extract embeds from fetched `giveawayMessage`**
       let embed = giveawayMessage.embeds.length > 0
           ? EmbedBuilder.from(giveawayMessage.embeds[0])
           : new EmbedBuilder().setTitle(giveaway.get("title") ?? "Giveaway");

@@ -98,7 +98,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         templateId = parseInt(rawArgs.shift()!, 10);
         console.log(`📌 Using Saved Template ID: ${templateId}`);
 
-        savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } }); // ✅ Assign to the global `savedGiveaway`
+        savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } });
 
         if (!savedGiveaway) {
             return message.reply(`❌ No saved giveaway found with ID: ${templateId}`);

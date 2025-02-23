@@ -18,11 +18,19 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
             return;
         }
 
+        const messageId = giveaway.get('messageId');
+
+        // ✅ Ensure messageId is valid before attempting to fetch
+        if (!messageId || messageId === "PENDING") {
+            console.warn(`⚠️ Giveaway ${giveawayId} has an invalid messageId: ${messageId}. Skipping update.`);
+            return;
+        }
+
         let updatedMessage: Message | null = null;
         try {
-            updatedMessage = await channel.messages.fetch(giveaway.get('messageId'));
+            updatedMessage = await channel.messages.fetch(messageId);
         } catch (error) {
-            console.error(`❌ Could not fetch giveaway message ${giveaway.get('messageId')}. Skipping update.`);
+            console.error(`❌ Could not fetch giveaway message ${messageId}. Skipping update.`);
             return;
         }
 
@@ -44,7 +52,7 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
         const participantsIndex = embed.data.fields?.findIndex(f => f.name.includes('🎟️ Total Participants')) ?? -1;
 
         if (timeLeft <= 0) {
-            console.log(`✅ Giveaway ${giveaway.get('id')} has ended, calling handleGiveawayEnd()`);
+            console.log(`✅ Giveaway ${giveawayId} has ended, calling handleGiveawayEnd()`);
 
             // ✅ Set status to "🛑 Ended!"
             if (timeRemainingIndex !== -1) {
@@ -64,7 +72,7 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
             await updatedMessage.edit({ embeds: [embed] });
 
             // ✅ Call handleGiveawayEnd to finalize giveaway
-            await handleGiveawayEnd(client, giveaway.get('id'));
+            await handleGiveawayEnd(client, giveawayId);
 
             return;
         }

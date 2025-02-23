@@ -1,12 +1,26 @@
-import { Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel, PermissionsBitField, User } from 'discord.js';
+import {
+    Message,
+    EmbedBuilder,
+    TextChannel,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    User
+} from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
+import { SavedGiveaway } from '../models/SavedGiveaway';
 import { GuildSettings } from '../models/GuildSettings';
 import { convertToMilliseconds } from '../utils/convertTime';
 import { startLiveCountdown } from '../utils/giveawayTimer';
 import { AllowedGiveawayChannels } from "../models/AllowedGiveawayChannels";
-
 import { client } from '../index';
 
+/**
+ * Removes surrounding quotes from a string.
+ */
+function sanitizeArg(arg: string | undefined): string {
+    return arg ? arg.replace(/^"|"$/g, '').trim() : '';
+}
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) {
@@ -37,87 +51,91 @@ export async function execute(message: Message, rawArgs: string[]) {
         return message.reply("❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
     }
 
+    console.log("🔍 [DEBUG] Raw Args:", rawArgs);
 
-    // Extract the first 3 required arguments (Title, Duration, Winner Count)
+    // ✅ **Check if the first argument is a valid template ID**
+    let templateId: number | null = null;
+    let savedGiveaway: SavedGiveaway | null = null;
     let title = "";
-    let duration = "";
-    let winnerCount = "";
+    let durationStr = "";
+    let winnerCountStr = "";
     let extraFields: Record<string, string> = {};
-    let selectedRole: string | null = null;
+    let roleId: string | null = null;
     let hostId: string = message.author.id;
     let useExtraEntries = false;
 
-    let i = 0;
-    while (i < rawArgs.length) {
-        const arg = rawArgs[i];
+    // **Sanitize all incoming arguments**
+    rawArgs = rawArgs.map(sanitizeArg);
 
-        if (arg === "--role" && rawArgs[i + 1]) {
-            selectedRole = rawArgs[i + 1];
-            i += 2;
-        } else if (arg === "--host" && rawArgs[i + 1]) {
-            const mentionMatch = rawArgs[i + 1].match(/^<@!?(\d+)>$/);
-            hostId = mentionMatch ? mentionMatch[1] : rawArgs[i + 1];
-            i += 2;
-        } else if (arg === "--field" && rawArgs[i + 1]) {
-            while (i + 1 < rawArgs.length && rawArgs[i + 1].includes(":")) {
-                const [key, ...valueParts] = rawArgs[i + 1].split(":");
-                if (key && valueParts.length > 0) {
-                    extraFields[key.trim()] = valueParts.join(":").trim();
-                }
-                i++;
-            }
-            i++;
-        } else if (arg === "--extraentries") {
-            useExtraEntries = true;
-            i++;
-        } else if (!title) {
-            title = arg;
-            i++;
-        } else if (!duration) {
-            duration = arg;
-            i++;
-        } else if (!winnerCount) {
-            winnerCount = arg;
-            i++;
-        } else {
-            i++;
+    if (!isNaN(parseInt(rawArgs[0], 10))) {
+        templateId = parseInt(rawArgs.shift()!, 10);
+        console.log(`📌 Using Saved Template ID: ${templateId}`);
+
+        savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } });
+
+        if (!savedGiveaway) {
+            return message.reply(`❌ No saved giveaway found with ID: ${templateId}`);
         }
+
+        // ✅ Load data from template
+        title = savedGiveaway.title;
+        durationStr = savedGiveaway.duration.toString();
+        winnerCountStr = savedGiveaway.winnerCount.toString();
+        extraFields = JSON.parse(savedGiveaway.extraFields ?? "{}");
+        roleId = savedGiveaway.role;
+    } else {
+        // ✅ **Extract Proper Arguments for Custom Giveaways**
+        title = sanitizeArg(rawArgs.shift());
+        durationStr = sanitizeArg(rawArgs.shift());
+        winnerCountStr = sanitizeArg(rawArgs.shift());
     }
 
-    if (!title || !duration || !winnerCount) {
+    if (!title || !durationStr || !winnerCountStr) {
         return message.reply("❌ Invalid usage! Example: `!ga custom \"Super Giveaway\" 30s 1 --field \"Requirement: Level 50+\" --role VIP --extraentries`.");
     }
 
-    const durationMs = convertToMilliseconds(duration);
-    if (durationMs <= 0) {
-        return message.reply("❌ Invalid duration format. Example: `30s`, `5m`, `1h`.");
+    // ✅ Convert & Validate Duration
+    let durationMs = convertToMilliseconds(durationStr);
+    if (isNaN(durationMs) || durationMs <= 0) {
+        console.warn(`⚠️ [DEBUG] Invalid duration (${durationMs}) detected! Defaulting to 60s.`);
+        durationMs = 60000;
     }
 
-    const winnerCountParsed = parseInt(winnerCount, 10);
-    if (isNaN(winnerCountParsed) || winnerCountParsed < 1) {
-        return message.reply("❌ Winner count must be a positive number.");
+    // ✅ Convert & Validate Winner Count
+    let winnerCount = parseInt(winnerCountStr, 10);
+    if (isNaN(winnerCount) || winnerCount <= 0) {
+        console.warn(`⚠️ [DEBUG] Invalid winner count (${winnerCount}) detected! Defaulting to 1.`);
+        winnerCount = 1;
+    }
+
+    console.log(`🎯 [DEBUG] Processed Values -> Title: ${title}, Duration: ${durationMs}ms, WinnerCount: ${winnerCount}`);
+
+    // ✅ **Extract Additional Flags & Extra Fields**
+    while (rawArgs.length > 0) {
+        const arg = sanitizeArg(rawArgs.shift());
+
+        if (arg === "--role" && rawArgs.length > 0) {
+            roleId = sanitizeArg(rawArgs.shift());
+        } else if (arg === "--host" && rawArgs.length > 0) {
+            const mentionMatch = rawArgs[0]?.match(/^<@!?(\d+)>$/);
+            hostId = mentionMatch ? mentionMatch[1] : sanitizeArg(rawArgs.shift());
+        } else if (arg === "--field" && rawArgs.length > 0) {
+            let fieldData = sanitizeArg(rawArgs.shift());
+            if (fieldData.includes(":")) {
+                let [key, ...valueParts] = fieldData.split(":");
+                key = sanitizeArg(key);
+                let value = sanitizeArg(valueParts.join(":"));
+                extraFields[key] = value;
+            }
+        } else if (arg === "--extraentries") {
+            useExtraEntries = true;
+        }
     }
 
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
     const channel = message.channel as TextChannel;
 
-    let existingGiveaway = await Giveaway.findOne({ where: { title, guildId } });
-    if (existingGiveaway) {
-        return message.reply("⚠️ A giveaway with this title already exists. Please use a different title.");
-    }
-
-    let roleMappings: Record<string, string> = {};
-    try {
-        roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
-    } catch {
-        roleMappings = {};
-    }
-
-    let rolePing = "";
-    if (selectedRole) {
-        const resolvedRole = roleMappings[selectedRole] || selectedRole;
-        rolePing = `<@&${resolvedRole}>`;
-    }
+    let rolePing = roleId ? `<@&${roleId}>` : "";
 
     let hostUser: User | null = null;
     try {
@@ -128,6 +146,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     const hostMention = hostUser ? `<@${hostUser.id}>` : `<@${message.author.id}>`;
 
+    // ✅ **Create Embed**
     const embed = new EmbedBuilder()
         .setTitle(`🎁 **${title}** 🎁`)
         .setDescription(`**Host:** ${hostMention}\n**Server:** ${message.guild?.name}`)
@@ -135,7 +154,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         .setFields([
             { name: "🎟️ Total Participants", value: "0 users", inline: true },
             { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-            { name: "🏆 Winners", value: `${winnerCountParsed}`, inline: true },
+            { name: "🏆 Winners", value: `${winnerCount}`, inline: true },
             ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value, inline: true }))
         ]);
 
@@ -143,28 +162,24 @@ export async function execute(message: Message, rawArgs: string[]) {
         embed.addFields([{ name: "✨ Extra Entries Enabled", value: "✅ Yes", inline: true }]);
     }
 
-    let giveawayMessage;
-    try {
-        giveawayMessage = await channel.send({
-            content: rolePing ? `🎉 ${rolePing} ${message.guild?.name} Giveaway!` : undefined,
-            embeds: [embed]
-        });
-    } catch (error) {
-        console.error("❌ Failed to send custom giveaway message:", error);
-        return message.reply("❌ Could not start custom giveaway. Bot might lack permissions.");
-    }
+    // ✅ **Send Giveaway Message**
+    let giveawayMessage = await channel.send({ content: rolePing, embeds: [embed] });
 
-    if (!giveawayMessage.id) {
-        return message.reply("❌ Giveaway message failed to send.");
-    }
-
+    // ✅ **Create "Join" and "Leave" Buttons**
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🎉").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave ❌").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder()
+            .setCustomId(`join-${giveawayMessage.id}`)
+            .setLabel("Join 🎉")
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId(`leave-${giveawayMessage.id}`)
+            .setLabel("Leave ❌")
+            .setStyle(ButtonStyle.Danger)
     );
 
     await giveawayMessage.edit({ components: [row] });
 
+    // ✅ **Create Giveaway Entry in Database**
     let giveawayData = await Giveaway.create({
         guildId,
         host: hostUser?.id ?? message.author.id,
@@ -176,12 +191,13 @@ export async function execute(message: Message, rawArgs: string[]) {
         duration: durationMs,
         endsAt,
         participants: JSON.stringify([]),
-        winnerCount: winnerCountParsed,
+        winnerCount,
         extraFields: JSON.stringify(extraFields),
         forceStart: false,
         useExtraEntries
     });
 
     startLiveCountdown(giveawayData.id, message.client);
-    return message.reply(`**${title}** started! Hosted by ${hostMention}.`);
+
+    return message.reply(`🎉 **${title}** started! Hosted by ${hostMention}.`);
 }
