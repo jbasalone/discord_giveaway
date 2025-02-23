@@ -56,6 +56,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "Optional Flags: `[--field \"name: value\"]`", value: "- Sets custom embed fields (e.g., `req: Level 50+`)." },
                 { name: "Optional Flags: `[--role \"rolename\"]`", value: "- Pings a role when the giveaway starts." },
                 { name: "Optional Flags: `[--extraentries]`", value: "- Gives Users Extra Entries based on server config." },
+                { name: "Optional Flags: `[--winners]`", value: "- add pre-selected winners (custom and mb only)" },
                 { name: "`!ga create <title> <duration> <winners>`", value: "🎉 Starts a quick giveaway. Example: `!ga create Super GA 30s 1`" },
                 { name: "`!ga custom <title> <duration> <winners> [--extraentries]`", value: "🛠 Starts a **custom giveaway**. Example: `!ga custom Mythic Giveaway 1h 3`." },
                 { name: "`!ga reroll <messageID>`", value: "🔄 **Rerolls winners** for a completed giveaway." },
@@ -90,6 +91,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "Optional Flags: `[--field \"name: value\"]`", value: "- Sets custom embed fields (e.g., `req: Level 50+`)." },
                 { name: "Optional Flags: `[--role \"rolename\"]`", value: "- Pings a role when the giveaway starts." },
                 { name: "Optional Flags: `[--force]`", value: "- Allows **Miniboss giveaways** to start with fewer participants." },
+                { name: "Optional Flags: `[--winners]`", value: "- add pre-selected winners ." },
                 { name: "🚀 Miniboss Structure Example", value: "- `!ga mb Mythic GA 1h --field \"whatevertitle: whatever message\" --role VIP`" },
                 { name: "`!ga miniboss <title> <duration> [--force]`", value: "🐲 **Starts a Miniboss Giveaway**. \n --force allows starting with less than 9 participants." },
                 { name: "`!ga mb <title> <duration>`", value: "⚔️ **Alias for Miniboss Giveaway**." }
@@ -105,6 +107,8 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "Optional Flags: `[--role \"rolename\"]`", value: "- Pings a role when the giveaway starts." },
                 { name: "Optional Flags: `[--extraentries]`", value: "- Gives Users Extra Entries based on server config." },
                 { name: "Optional Flags: `[--force]`", value: "- Allows **Miniboss giveaways** to start with fewer participants." },
+                { name: "Optional Flags: `[--winners]`", value: "- add pre-selected winners ." },
+
             ]
         };
 

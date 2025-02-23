@@ -148,7 +148,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     // ✅ **Create Embed**
     const embed = new EmbedBuilder()
-        .setTitle(`🎁 **${title}** 🎁`)
+        .setTitle(`🚀 **${title}** `)
         .setDescription(`**Host:** ${hostMention}\n**Server:** ${message.guild?.name}`)
         .setColor("Blue")
         .setFields([
@@ -173,7 +173,7 @@ export async function execute(message: Message, rawArgs: string[]) {
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
             .setCustomId(`leave-${giveawayMessage.id}`)
-            .setLabel("Leave ❌")
+            .setLabel("Leave 💨")
             .setStyle(ButtonStyle.Danger)
     );
 

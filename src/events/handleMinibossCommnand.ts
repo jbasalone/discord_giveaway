@@ -151,7 +151,7 @@ export async function handleMinibossCommand(
         const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("💰 Give 1 Minute").setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("❌ End Giveaway").setStyle(ButtonStyle.Danger)
+            new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
         );
 
         await minibossChannel.send({

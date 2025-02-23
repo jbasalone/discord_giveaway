@@ -14,19 +14,10 @@ import { numberToPrettyERPGNumber } from '../utils/formatNumbers';
 import { AllowedGiveawayChannels } from "../models/AllowedGiveawayChannels";
 import { MinibossRoles } from "../models/MinibossRoles";
 
-
 async function getUserMinibossStats(userId: string): Promise<{ userLevel: number, ttLevel: number } | null> {
     try {
         const user = await UserProfile.findOne({ where: { userId } });
-
-        console.log(`🔍 Debug: Retrieved User Data for ${userId}:`, user?.toJSON());
-
-        if (!user) return null;
-
-        return {
-            userLevel: user.get("userLevel") ?? 100,
-            ttLevel: user.get("ttLevel") ?? 100
-        };
+        return user ? { userLevel: user.get("userLevel") ?? 100, ttLevel: user.get("ttLevel") ?? 100 } : null;
     } catch (error) {
         console.error(`❌ Error retrieving stats for user ${userId}:`, error);
         return null;
@@ -34,169 +25,96 @@ async function getUserMinibossStats(userId: string): Promise<{ userLevel: number
 }
 
 function calculateCoinWinnings(userLevel: number, ttLevel: number) {
-    const safeLevel = isNaN(userLevel) ? 100 : userLevel;
-    const min = Math.floor(0.4 * 125 * safeLevel * safeLevel);
-    const max = Math.floor(125 * safeLevel * safeLevel);
-
+    const min = Math.floor(0.4 * 125 * userLevel * userLevel);
+    const max = Math.floor(125 * userLevel * userLevel);
     return { min, max };
 }
 
-
-function calculateMinimumTTLevel(maxCoins: number): number {
-    let minTT = 1;
-    while (true) {
-        const bankCap = 500_000_000 * Math.pow(minTT, 4) + 100_000 * Math.pow(1, 2);
-        if (bankCap >= maxCoins) {
-            return minTT;
-        }
-        minTT++;
-    }
-}
-
 export async function execute(message: Message, rawArgs: string[]) {
-    if (!message.guild) {
-        return message.reply("❌ This command must be used inside a server.");
-    }
+    if (!message.guild) return message.reply("❌ This command must be used inside a server.");
 
-    let guildId = message.guild.id
-
+    let guildId = message.guild.id;
     const allowedRoles = await MinibossRoles.findAll({ where: { guildId } });
     const allowedRoleIds = allowedRoles.map(role => role.get('roleId')).filter(Boolean);
 
-
-    if (allowedRoleIds.length === 0) {
-        console.warn("⚠️ No Miniboss roles found in DB for this guild.");
-    }
-
-    const hasPermission = message.member?.roles.cache.some(role => allowedRoleIds.includes(role.id));
-
-    console.log("🔍 [DEBUG] Allowed Miniboss Role IDs:", allowedRoleIds);
-    console.log("🔍 [DEBUG] User Roles:", message.member?.roles.cache.map(r => r.id));
-
-    if (!hasPermission) {
+    if (!allowedRoleIds.length) console.warn("⚠️ No Miniboss roles found in DB for this guild.");
+    if (!message.member?.roles.cache.some(role => allowedRoleIds.includes(role.id))) {
         return message.reply("❌ You **do not have permission** to start Miniboss Giveaways.");
     }
 
     const allowedChannel = await AllowedGiveawayChannels.findOne({ where: { guildId, channelId: message.channel.id } });
-
-    if (!allowedChannel) {
-        return message.reply("❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
-    }
+    if (!allowedChannel) return message.reply("❌ Giveaways can only be started in **approved channels**.");
 
     console.log("🔍 [DEBUG] Raw Args:", rawArgs);
 
     let templateId: number | null = null;
     let savedGiveaway: SavedGiveaway | null = null;
-    let title = "Unknown Giveaway";
+    let title = "Miniboss Giveaway";
     let duration = 60;
     let winnerCount = 1;
     let extraFields: Record<string, string> = {};
-    let roleId: string | null = null;
+    let guaranteedWinners: string[] = [];
 
-    // ✅ Check if using a template
-    if (!isNaN(parseInt(rawArgs[0], 10))) {
-        templateId = parseInt(rawArgs.shift()!, 10);
-        console.log(`📌 Using Saved Template ID: ${templateId}`);
+    // ✅ **Extract Values Regardless of Order**
+    let i = 0;
+    while (i < rawArgs.length) {
+        const arg = rawArgs[i];
 
-        savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } });
+        if (!isNaN(parseInt(arg, 10)) && !templateId) {
+            templateId = parseInt(arg, 10);
+            savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } });
+            if (!savedGiveaway) return message.reply(`❌ No saved giveaway found with ID: ${templateId}`);
 
-        if (!savedGiveaway) {
-            return message.reply(`❌ No saved giveaway found with ID: ${templateId}`);
-        }
-
-        // ✅ Load data from template
-        title = savedGiveaway.title;
-        duration = savedGiveaway.duration;
-        winnerCount = savedGiveaway.winnerCount;
-        extraFields = JSON.parse(savedGiveaway.extraFields ?? "{}");
-    }
-
-    // ✅ Extract remaining arguments
-    if (rawArgs.length > 0) title = rawArgs.shift()!;
-    if (rawArgs.length > 0) duration = parseInt(rawArgs.shift()!, 10);
-    if (rawArgs.length > 0) winnerCount = parseInt(rawArgs.shift()!, 10);
-
-    while (rawArgs.length > 0) {
-        const keyFlagIndex = rawArgs.indexOf("--field");
-        if (keyFlagIndex !== -1 && keyFlagIndex + 1 < rawArgs.length) {
-            rawArgs.splice(keyFlagIndex, 1); // Remove `--field`
-            const rawField = rawArgs.splice(keyFlagIndex, 1)[0];
-            if (rawField) {
-                let [key, ...valueParts] = rawField.split(":");
-                let value = valueParts.join(":").trim();
-                key = key.replace(/^"+|"+$/g, "").trim();
-                value = value.replace(/^"+|"+$/g, "").replace(/\\n/g, "\n").trim();
-                if (key && value) {
-                    extraFields[key] = value;
-                }
+            title = savedGiveaway.title;
+            duration = savedGiveaway.duration;
+            winnerCount = savedGiveaway.winnerCount;
+            extraFields = JSON.parse(savedGiveaway.extraFields ?? "{}");
+        } else if (arg.startsWith("--winners")) {
+            i++;
+            while (i < rawArgs.length && rawArgs[i].startsWith("<@")) {
+                const mentionMatch = rawArgs[i].match(/^<@!?(\d+)>$/);
+                if (mentionMatch) guaranteedWinners.push(mentionMatch[1]);
+                i++;
             }
-        } else {
-            break;
+            continue;
+        } else if (arg.match(/^\d+[smhd]$/) && !duration) {
+            duration = parseInt(arg, 10);
+        } else if (!isNaN(parseInt(arg, 10)) && !winnerCount) {
+            winnerCount = parseInt(arg, 10);
+        } else if (!arg.startsWith("--")) {
+            title = arg;
         }
+        i++;
     }
 
-    console.log("📌 [DEBUG] Extracted Fields:", { templateId, title, duration, winnerCount, extraFields });
-
-    const roleIndex = rawArgs.indexOf("--role");
-    if (roleIndex !== -1 && roleIndex + 1 < rawArgs.length) {
-        const extractedRole = rawArgs.splice(roleIndex, 2)[1];
-        if (typeof extractedRole === "string") {
-            roleId = extractedRole;
-        }
-    }
+    console.log(`📌 [DEBUG] Title: ${title}, Duration: ${duration}, Winners: ${winnerCount}, Guaranteed:`, guaranteedWinners);
 
     const hostId = message.author.id;
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(duration / 1000);
     const channel = message.channel as TextChannel;
 
-    // ✅ Fetch Host's Stats (Level & TT Level)
+    // ✅ **Fetch Host's Stats**
     const hostStats = await getUserMinibossStats(hostId);
-    if (!hostStats) {
-        return message.reply("⚠️ Your stats are not set! Use: `!setlevel <your_level> <tt_level>`.");
-    }
+    if (!hostStats) return message.reply("⚠️ Your stats are not set! Use: `!setlevel <your_level> <tt_level>`.");
 
     const { userLevel, ttLevel } = hostStats;
-
-    // ✅ Calculate Expected Coin Winnings
     const { min, max } = calculateCoinWinnings(userLevel, ttLevel);
-    const formattedMin = numberToPrettyERPGNumber(min);
-    const formattedMax = numberToPrettyERPGNumber(max);
 
-
-    // ✅ Determine Minimum TT Level Required
-    const minRequiredTT = calculateMinimumTTLevel(max);
-
-    let extraFieldEntries = Object.entries(extraFields).map(([key, value]) => ({
-        name: key.trim(),
-        value: String(value).trim(),
-        inline: true
-    }));
-
-    if (roleId) {
-        await channel.send(`<${roleId}> **MB Giveaway - Level ${userLevel} (TT ${ttLevel})** 🎊`);
-    }
-
-    // ✅ Create Embed
+    // ✅ **Create Giveaway Embed**
     const embed = new EmbedBuilder()
         .setTitle(`🎊 **MB Giveaway - Level ${userLevel} (TT ${ttLevel})** 🎊`)
         .setDescription(`**Host:** <@${hostId}>\n**Server:** ${message.guild?.name}`)
         .setColor("DarkRed")
         .setFields([
-            { name: "🪙 Host Level:", value: `${userLevel}`, inline: true },
-            { name: "🌌 Min Required TT Level", value: `${minRequiredTT}`, inline: true },
-            { name: "💰 Expected Coins", value: `${formattedMin} - ${formattedMax}`, inline: true },
-            { name: "🏆 Required Participants", value: `${winnerCount} Required`, inline: true },
             { name: "🎟️ Total Participants", value: "0 users", inline: true },
             { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-            ...extraFieldEntries
+            { name: "💰 Expected Coins", value: `${numberToPrettyERPGNumber(min)} - ${numberToPrettyERPGNumber(max)}`, inline: true },
+            { name: "🏆 Guaranteed Winners", value: guaranteedWinners.length > 0 ? guaranteedWinners.map(id => `<@${id}>`).join(", ") : "None", inline: true }
         ]);
 
     let giveawayMessage = await channel.send({ embeds: [embed] });
-    const isForced = savedGiveaway ? Boolean(Number(savedGiveaway.get("forceStart"))) : false;
-    console.log(`📌 [DEBUG] Saved Template forceStart: ${savedGiveaway?.get("forceStart")} (isForced: ${isForced})`);
 
-
-    // ✅ Save Giveaway
+    // ✅ **Save Giveaway**
     const createdGiveaway = await Giveaway.create({
         guildId: message.guild.id,
         host: hostId,
@@ -210,18 +128,15 @@ export async function execute(message: Message, rawArgs: string[]) {
         participants: JSON.stringify([]),
         winnerCount,
         extraFields: JSON.stringify(extraFields),
-        forceStart: isForced,
+        guaranteedWinners: JSON.stringify(guaranteedWinners)
     });
 
-    const giveawayId = createdGiveaway.id;
-
-    // ✅ Add Join/Leave Buttons
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🐉").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave ❌").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave 💨").setStyle(ButtonStyle.Danger)
     );
 
     await giveawayMessage.edit({ components: [row] });
 
-    startLiveCountdown(giveawayId, message.client);
+    startLiveCountdown(createdGiveaway.id, message.client);
 }

@@ -67,6 +67,18 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
     const isForced = Boolean(Number(giveaway.get("forceStart")));
 
+    // ✅ **Retrieve Guaranteed Winners from Extra Fields**
+    let guaranteedWinners: string[] = [];
+    try {
+      const extraFields = JSON.parse(giveaway.get("extraFields") ?? "{}");
+      if (Array.isArray(extraFields.guaranteedWinners)) {
+        guaranteedWinners = extraFields.guaranteedWinners;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Failed to parse guaranteed winners: ${error}`);
+    }
+
+    console.log(`🔒 Guaranteed Winners for Giveaway ${giveawayId}:`, guaranteedWinners);
 
     // ✅ **Miniboss Giveaway Logic**
     if (giveaway.get("type") === "miniboss") {
@@ -75,13 +87,11 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       if (isForced || participants.length >= 10) {
         console.log(`🚀 **Proceeding with Miniboss Giveaway** (Forced: ${isForced}, Participants: ${participants.length})`);
         await handleMinibossCommand(client, giveawayId, participants);
-
       } else {
         console.warn(`❌ Miniboss Giveaway cannot proceed due to insufficient participants.`);
         return;
       }
     } else {
-
       let winners = "No winners.";
       let winnerList: string[] = [];
       const maxWinners = Number(giveaway.get("winnerCount"));
@@ -122,6 +132,15 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
         participantsWithWeights.push(...participants);
       }
 
+      // ✅ **Step 1: Add Guaranteed Winners First**
+      for (const guaranteedWinner of guaranteedWinners) {
+        if (winnerList.length < maxWinners && participants.includes(guaranteedWinner)) {
+          winnerList.push(guaranteedWinner);
+          participantsWithWeights.splice(participantsWithWeights.indexOf(guaranteedWinner), 1);
+        }
+      }
+
+      // ✅ **Step 2: Pick Remaining Winners Randomly**
       while (winnerList.length < maxWinners && participantsWithWeights.length > 0) {
         const winnerIndex = Math.floor(Math.random() * participantsWithWeights.length);
         const winner = participantsWithWeights.splice(winnerIndex, 1)[0];
