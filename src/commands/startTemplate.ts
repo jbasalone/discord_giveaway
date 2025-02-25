@@ -13,7 +13,7 @@ export async function execute(message: Message, rawArgs: string[]) {
   }
 
   const templateId = parseInt(rawArgs[0], 10);
-  console.log("🔍 [DEBUG] Template ID:", templateId);
+  console.log("🔍 [DEBUG] [startTemplate] Template ID:", templateId);
 
   if (isNaN(templateId)) {
     return message.reply("❌ Invalid ID. Please enter a **valid template ID number**.");
@@ -28,24 +28,26 @@ export async function execute(message: Message, rawArgs: string[]) {
     // ✅ Extract values safely
     const { type, title, duration, winnerCount, role, extraFields } = savedGiveaway.get();
 
-    // ✅ Ensure duration is valid & correctly converted to milliseconds
     let durationMs = Number(duration);
+
     if (isNaN(durationMs) || durationMs <= 0) {
-      console.warn(`⚠️ [DEBUG] Invalid duration detected! Defaulting to **5 minutes**.`);
-      durationMs = 5 * 60 * 1000; // Default 5 minutes
-    } else if (durationMs < 86400) {
-      durationMs *= 1000; // ✅ Convert seconds to milliseconds
+      console.warn(`⚠️ [DEBUG] [startTemplate] Invalid duration detected! Defaulting to **1 minute**.`);
+      durationMs = 60 * 1000; // Default 1 minute
+    } else if (durationMs >= 1000) {
+      console.log(`✅ [DEBUG] [startTemplate] Duration is already in milliseconds: ${durationMs}`);
+    } else {
+      console.log(`✅ [DEBUG] [startTemplate] Converting duration from seconds to milliseconds: ${durationMs} → ${durationMs * 1000}`);
+      durationMs *= 1000;
     }
 
-    // ✅ Ensure winner count is valid
     let parsedWinnerCount = Number(winnerCount);
     if (isNaN(parsedWinnerCount) || parsedWinnerCount <= 0) {
-      console.warn(`⚠️ [DEBUG] Invalid winner count detected! Defaulting to 1.`);
+      console.warn(`⚠️ [DEBUG][startTemplate] Invalid winner count detected! Defaulting to 1.`);
       parsedWinnerCount = 1;
     }
 
-    console.log(`🚀 Starting ${type === "miniboss" ? "Miniboss" : "Custom"} Giveaway with Template ID: ${templateId}`);
-    console.log(`🎯 [DEBUG] Extracted Values -> Title: ${title}, Duration: ${durationMs}, Winners: ${parsedWinnerCount}`);
+    console.log(`🚀 Starting [startTemplate] ${type === "miniboss" ? "Miniboss" : "Custom"} Giveaway with Template ID: ${templateId}`);
+    console.log(`🎯 [DEBUG] [startTemplate] Extracted Values -> Title: ${title}, Duration: ${durationMs}, Winners: ${parsedWinnerCount}`);
 
     let argsToPass: string[] = [
       String(templateId),
@@ -65,7 +67,7 @@ export async function execute(message: Message, rawArgs: string[]) {
       argsToPass.push("--role", role);
     }
 
-    console.log(`📌 [DEBUG] Final Args to Pass:`, argsToPass);
+    console.log(`📌 [DEBUG] [startTemplate] Final Args to Pass:`, argsToPass);
 
     // ✅ Ensure the correct function is called
     if (type === "miniboss") {
