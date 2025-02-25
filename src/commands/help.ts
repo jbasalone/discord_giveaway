@@ -17,6 +17,7 @@ export async function execute(message: Message) {
                     { label: "📜 Template Commands", value: "template" },
                     { label: "⚙️ Admin Commands", value: "admin" },
                     { label: "👑 Miniboss Commands", value: "miniboss" },
+                    { label: "🕵️ Secret Giveaway", value: "secret"},
                     { label: "🛡️ User Commands", value: "user" },
                     { label: "🚀 Advanced Flags & Examples", value: "flags" }
                 )
@@ -40,6 +41,7 @@ export async function handleHelpSelection(interaction: Interaction) {
             "about": [
                 { name: "🎉 **What does this bot do?**", value: "- This bot allows servers to host giveaways with advanced customization, template saving for quick starts, automated prize drawing, and role-based restrictions." },
                 { name: "🔹 **Types of Giveaways**", value: "- **Quick Giveaways**: Basic `!ga create` giveaways.\n- **Custom Giveaways**: Advanced giveaways with roles & extra entries.\n- **Miniboss Giveaways**: High-stakes giveaways with specific requirements." },
+                { name: "🕵 Secret Giveaways", value: "- Secret Giveaways are Giveaways that randomly send join messages to random channels and the first # of winners to join win" },
                 { name: "🔑 **User vs Admin**", value: "- **Users**: Join giveaways, check status, set their levels.\n- **Admins**: Configure giveaway settings, set role permissions, restrict channels, etc." },
                 { name: "🚀 Custom Structure Example", value: "`!ga custom Mythic GA 1h 3 --role VIP --extraentries --field \"Requirement: Level 100+\"`" },
                 { name: "🚀 Basic Structure Example", value: "- `!ga create Mythic GA 1h 3 --role VIP`" },
@@ -80,7 +82,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "`!ga setblacklist @role`", value: "🚫 **Blacklists a role from joining giveaways**." },
                 { name: "`!ga setchannel add #channel`", value: "📌 **Restricts giveaways to specific channels**." },
                 { name: "`!ga listroles`", value: "📜 Lists all **configured roles**." },
-                { name: "`!ga setrole --allowed  add/remove <roleid>`", value: "👑 **Restricts GA creation to specific roles**." },
+                { name: "`!ga setrole --allowed add/remove <roleid>`", value: "👑 **Restricts GA creation to specific roles**." },
                 { name: "`!ga setrole --role add/remove rolename: <roleid>`", value: "👑 **Role Pings** and name to use with --role." },
                 { name: "`!ga setrole --miniboss add/remove @role`", value: "👑 set **Miniboss Host** to allow miniboss gas ." },
                 { name: "`!ga mbch #channel`", value: "👑 **Miniboss Channel** for executing MB." },
@@ -95,6 +97,13 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "🚀 Miniboss Structure Example", value: "- `!ga mb Mythic GA 1h --field \"whatevertitle: whatever message\" --role VIP`" },
                 { name: "`!ga miniboss <title> <duration> [--force]`", value: "🐲 **Starts a Miniboss Giveaway**. \n --force allows starting with less than 9 participants." },
                 { name: "`!ga mb <title> <duration>`", value: "⚔️ **Alias for Miniboss Giveaway**." }
+            ],
+            "secret":[
+                { name: "About Secret Giveaway", value: "- secret giveaways send random messages to random channels asking users to join.\nYou set the amount of winners, below is 10\n and set the amount of hours, bleow is 48"},
+                { name: "Secret Giveaway", value: "- `!ga secret 10 48 \"Hidden giveaway message!\"`"},
+                { name: "Turning On/Off Secret", value: "- `!ga setsecret on|off`"},
+                { name: "Config Categories", value: "- `!ga setsecret on|off <channelid> <channelid>`"},
+                { name: "Set Summary Channel", value: "- `!ga setsummary #channel`"}
             ],
             "user": [
                 { name: "`!ga setlevel <level> <ttLevel>`", value: "🔢 **Set your RPG level & TT level for Miniboss giveaways**." },
@@ -135,6 +144,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                     { label: "📜 Template Commands", value: "template" },
                     { label: "👑 Miniboss Commands", value: "miniboss" },
                     { label: "🚀 Advanced Flags & Examples", value: "flags" },
+                    { label: "🕵️ Secret Giveaway", value: "secret"},
                     { label: "🛡️ User Commands", value: "user" },
                     { label: "⚙️ Admin Commands", value: "admin" }
                 )

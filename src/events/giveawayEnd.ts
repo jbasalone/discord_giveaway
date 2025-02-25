@@ -3,6 +3,9 @@ import {
   TextChannel,
   EmbedBuilder,
   Message,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { ExtraEntries } from '../models/ExtraEntries';
@@ -80,13 +83,27 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
     console.log(`🔒 Guaranteed Winners for Giveaway ${giveawayId}:`, guaranteedWinners);
 
-    // ✅ **Miniboss Giveaway Logic**
     if (giveaway.get("type") === "miniboss") {
       console.log(`🔍 Miniboss Giveaway Detected! Checking participant count... (Participants: ${participants.length}, isForced: ${isForced})`);
 
-      if (isForced || participants.length >= 10) {
+      if (isForced || participants.length >= 9) {
         console.log(`🚀 **Proceeding with Miniboss Giveaway** (Forced: ${isForced}, Participants: ${participants.length})`);
         await handleMinibossCommand(client, giveawayId, participants);
+
+        // ✅ **Update Miniboss Giveaway Embed & Remove Buttons**
+        let minibossEmbed = new EmbedBuilder()
+            .setTitle(giveaway.get("title") ?? "Miniboss Giveaway")
+            .setColor("Red")
+            .addFields([
+              { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
+              { name: "🏆 Winners", value: participants.length > 0 ? participants.map(id => `<@${id}>`).join(", ") : "No winners.", inline: true }
+            ]);
+
+        await giveawayMessage.edit({ embeds: [minibossEmbed], components: [] }); // ✅ Remove buttons after ending
+        await channel.send({
+          content: `🎉 **Miniboss Giveaway Ended!** 🎉\n🏆 **Winners:** ${participants.length > 0 ? participants.map(id => `<@${id}>`).join(", ") : "No winners."}\n🔗 [Giveaway Link](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,
+        });
+
       } else {
         console.warn(`❌ Miniboss Giveaway cannot proceed due to insufficient participants.`);
         return;
@@ -132,15 +149,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
         participantsWithWeights.push(...participants);
       }
 
-      // ✅ **Step 1: Add Guaranteed Winners First**
-      for (const guaranteedWinner of guaranteedWinners) {
-        if (winnerList.length < maxWinners && participants.includes(guaranteedWinner)) {
-          winnerList.push(guaranteedWinner);
-          participantsWithWeights.splice(participantsWithWeights.indexOf(guaranteedWinner), 1);
-        }
-      }
-
-      // ✅ **Step 2: Pick Remaining Winners Randomly**
       while (winnerList.length < maxWinners && participantsWithWeights.length > 0) {
         const winnerIndex = Math.floor(Math.random() * participantsWithWeights.length);
         const winner = participantsWithWeights.splice(winnerIndex, 1)[0];
@@ -152,26 +160,14 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
       winners = winnerList.length > 0 ? winnerList.map(id => `<@${id}>`).join(", ") : "No winners.";
 
-      let embed = giveawayMessage.embeds.length > 0
-          ? EmbedBuilder.from(giveawayMessage.embeds[0])
-          : new EmbedBuilder().setTitle(giveaway.get("title") ?? "Giveaway");
-
-      embed.data.fields = embed.data.fields?.filter(field =>
-          !["🎟️ Total Participants", "🏆 Winners"].includes(field.name)
-      ) ?? [];
+      let embed = new EmbedBuilder().setTitle(giveaway.get("title") ?? "Giveaway").setColor("Red");
 
       embed.addFields([
         { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
         { name: "🏆 Winners", value: winners, inline: true }
       ]);
 
-      if (embed.data.fields.length > 25) {
-        embed.data.fields = embed.data.fields.slice(0, 25);
-      }
-
-      embed.setColor('Red');
-
-      await giveawayMessage.edit({ embeds: [embed] });
+      await giveawayMessage.edit({ embeds: [embed], components: [] }); // ✅ Remove buttons here
 
       await channel.send({
         content: `🎉 **Giveaway Ended!** 🎉\n🏆 **Winners:** ${winners}\n🔗 [Giveaway Link](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,

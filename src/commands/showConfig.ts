@@ -5,6 +5,7 @@ import { ExtraEntries } from '../models/ExtraEntries';
 import { BlacklistedRoles } from '../models/BlacklistedRoles';
 import { AllowedGiveawayChannels } from '../models/AllowedGiveawayChannels';
 import { MinibossRoles } from '../models/MinibossRoles';
+import { SecretGiveawaySettings } from '../models/SecretGiveaway'; // Import secret giveaways settings
 
 export async function execute(message: Message, guildId?: string) {
   if (!message.guild) {
@@ -83,7 +84,20 @@ export async function execute(message: Message, guildId?: string) {
         ? Object.entries(roleMappings).map(([roleName, roleId]) => `**${roleName}**: <@&${roleId}>`).join("\n")
         : "❌ No ping roles set.";
 
-    // Create Compact Embed
+    // ✅ **Fetch Secret Giveaway Settings**
+    const secretGiveawaySettings = await SecretGiveawaySettings.findOne({ where: { guildId } });
+
+    const secretGiveawaysEnabled = secretGiveawaySettings?.get("enabled") ? "✅ Enabled" : "❌ Disabled";
+    let secretGiveawayChannelsText = "❌ No channels set.";
+
+    if (secretGiveawaySettings) {
+      const secretCategoryIds: string[] = JSON.parse(secretGiveawaySettings.get("categoryIds") ?? "[]");
+      if (secretCategoryIds.length > 0) {
+        secretGiveawayChannelsText = secretCategoryIds.map(id => `<#${id}>`).join(", ");
+      }
+    }
+
+    // ✅ **Create Compact Embed**
     const embed = new EmbedBuilder()
         .setTitle(`⚙️ Server Giveaway Configuration`)
         .setDescription(`📜 **Server Settings for** **${message.guild.name}**`)
@@ -97,7 +111,9 @@ export async function execute(message: Message, guildId?: string) {
             { name: "👑 Miniboss Roles", value: minibossRolesText, inline: false },
             { name: "📣 Giveaway Ping Roles", value: roleMappingsText, inline: false },
             { name: "🎟️ Extra Entry Roles", value: extraEntriesText, inline: false },
-            { name: "🚫 Blacklisted Roles", value: blacklistedRolesText, inline: false }
+            { name: "🚫 Blacklisted Roles", value: blacklistedRolesText, inline: false },
+            { name: "🕵️ Secret Giveaways", value: secretGiveawaysEnabled, inline: true },
+            { name: "📂 Secret Giveaway Channels", value: secretGiveawayChannelsText, inline: false }
         )
         .setFooter({ text: "Only server admins can modify these settings." });
 

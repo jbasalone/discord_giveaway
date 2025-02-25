@@ -11,6 +11,8 @@ import { handleGiveawayEnd } from './events/giveawayEnd';
 import { getGuildPrefix } from './utils/getGuildPrefix';
 import { Giveaway } from './models/Giveaway';
 import { Op } from 'sequelize';
+import { handleSecretGiveawayButton } from "./events/handleSecretGiveawayButton";
+
 
 import { execute as executeSetLevel } from './commands/setLevel';
 import { execute as executeEditTemplate } from './commands/editTemplate';
@@ -35,6 +37,11 @@ import { execute as executeListMBRoles } from './commands/listMinibossRoles'
 import { execute as executeMyLevel } from './commands/myLevel'
 import { execute as executeSetAccess } from './commands/BotAccess'
 import { execute as executeListAccess } from './commands/listAuthorizedGuilds'
+import { execute as executeSetSecret } from './commands/setSecret'
+import { execute as executeStartSecret } from './commands/startSecretGiveaway'
+import { execute as executeSetSummary } from './commands/setSummary'
+import { execute as executeBugCreate } from './commands/bugs'
+import {execute as executeUpdateBug } from './commands/updateBug'
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -92,6 +99,9 @@ async function startBot() {
 
       try {
         switch (command) {
+          case 'bug':
+              await executeBugCreate(message);
+              break;
           case 'create': case 'quick':
             await executeGiveaway(message, args);
             break;
@@ -155,11 +165,23 @@ async function startBot() {
           case 'setrole': case 'setroles':
             await executeSetRole(message, args);
             break;
+          case 'setsummary':
+            await executeSetSummary(message, args);
+            break;
           case 'setminibosschannel': case 'setmbch':
             await executeSetMinibossChannel(message, args);
             break;
+          case 'setsecret':
+            await executeSetSecret(message, args);
+            break;
           case 'starttemplate': case 'start':
             await executeStartTemplate(message, args);
+            break;
+          case 'startsecret':
+            await executeStartSecret(message, args);
+            break;
+          case 'update':
+            await executeUpdateBug(message, args);
             break;
           default:
             await message.reply(`❌ Unknown command. Use \`${prefix} ga help\` to see available commands.`);
@@ -193,6 +215,9 @@ async function startBot() {
 
             console.log(`🔍 Calling handleMinibossCommand (Participants: ${participants.length})`);
             await handleMinibossCommand(client, parseInt(giveawayId), participants);
+
+          } else if (interaction.customId.startsWith("secret-")) {
+            await handleSecretGiveawayButton(interaction); // ✅ Handle secret giveaway button interactions
           } else {
             await executeJoinLeave(interaction);
           }

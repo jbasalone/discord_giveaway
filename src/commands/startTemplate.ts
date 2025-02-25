@@ -25,62 +25,54 @@ export async function execute(message: Message, rawArgs: string[]) {
       return message.reply(`❌ No saved giveaway template found with ID **${templateId}**.`);
     }
 
-    // ✅ Extract values correctly
-    const templateData = savedGiveaway.get();
-    const {
-      id,
-      title,
-      duration,
-      winnerCount,
-      type,
-      role,
-      extraFields
-    } = templateData;
+    // ✅ Extract values safely
+    const { type, title, duration, winnerCount, role, extraFields } = savedGiveaway.get();
 
-    console.log(`🚀 Starting ${type === "miniboss" ? "Miniboss" : "Custom"} Giveaway with Template ID: ${templateId}`);
+    // ✅ Ensure duration is valid & correctly converted to milliseconds
+    let durationMs = Number(duration);
+    if (isNaN(durationMs) || durationMs <= 0) {
+      console.warn(`⚠️ [DEBUG] Invalid duration detected! Defaulting to **5 minutes**.`);
+      durationMs = 5 * 60 * 1000; // Default 5 minutes
+    } else if (durationMs < 86400) {
+      durationMs *= 1000; // ✅ Convert seconds to milliseconds
+    }
 
-    // ✅ **Ensure Correct Extraction of Values**
-    let parsedDuration = Number(duration);
+    // ✅ Ensure winner count is valid
     let parsedWinnerCount = Number(winnerCount);
-
-    // 🚨 **Fix Winner Count Handling**
     if (isNaN(parsedWinnerCount) || parsedWinnerCount <= 0) {
-      console.warn(`⚠️ [DEBUG] Invalid winnerCount (${parsedWinnerCount}) detected! Defaulting to 1.`);
+      console.warn(`⚠️ [DEBUG] Invalid winner count detected! Defaulting to 1.`);
       parsedWinnerCount = 1;
     }
 
-    // 🚨 **Debugging Winner Count Value**
-    console.log(`🎯 [DEBUG] Extracted Values -> Title: ${title}, Duration: ${parsedDuration}, WinnerCount: ${parsedWinnerCount}`);
+    console.log(`🚀 Starting ${type === "miniboss" ? "Miniboss" : "Custom"} Giveaway with Template ID: ${templateId}`);
+    console.log(`🎯 [DEBUG] Extracted Values -> Title: ${title}, Duration: ${durationMs}, Winners: ${parsedWinnerCount}`);
 
-    // ✅ **Ensure Correct Order of Arguments**
     let argsToPass: string[] = [
-      String(id),               // Giveaway ID
-      `"${title}"`,             // Title
-      String(parsedDuration),   // Duration
-      String(parsedWinnerCount) // Winner Count
+      String(templateId),
+      `"${title}"`,
+      String(durationMs),
+      String(parsedWinnerCount)
     ];
 
-    // ✅ **Extract Extra Fields**
+    // ✅ Parse Extra Fields
     const parsedExtraFields = extraFields ? JSON.parse(extraFields) : {};
     for (const [key, value] of Object.entries(parsedExtraFields)) {
       argsToPass.push("--field", `"${key}: ${value}"`);
     }
 
-    // ✅ **Append Role ID as a Flag if It Exists**
+    // ✅ Add role if present
     if (role && typeof role === "string") {
       argsToPass.push("--role", role);
     }
 
     console.log(`📌 [DEBUG] Final Args to Pass:`, argsToPass);
-    console.log(`🚀 [DEBUG] Final Values Before Execution: Duration=${parsedDuration}, WinnerCount=${parsedWinnerCount}`);
 
-    // ✅ **Ensure Correct Giveaway Function is Called**
+    // ✅ Ensure the correct function is called
     if (type === "miniboss") {
       await startMinibossGiveaway(message, argsToPass);
     } else {
       await startCustomGiveaway(message, argsToPass);
     }
-
   } catch (error) {
     console.error("❌ Error starting giveaway from template:", error);
     return message.reply("❌ Failed to start the saved giveaway. Please check logs.");
