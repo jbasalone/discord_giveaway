@@ -29,7 +29,6 @@ export async function execute(message: Message, rawArgs: string[]) {
     const { type, title, duration, winnerCount, role, extraFields } = savedGiveaway.get();
 
     let durationMs = Number(duration);
-
     if (isNaN(durationMs) || durationMs <= 0) {
       console.warn(`⚠️ [DEBUG] [startTemplate] Invalid duration detected! Defaulting to **1 minute**.`);
       durationMs = 60 * 1000; // Default 1 minute
@@ -66,6 +65,29 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (role && typeof role === "string") {
       argsToPass.push("--role", role);
     }
+
+    // ✅ Extract `--winners` from `rawArgs` and pass it to `minibossGiveaway.ts`
+    const winnersIndex = rawArgs.indexOf("--winners");
+    if (winnersIndex !== -1) {
+      let newWinners: string[] = [];
+      let i = winnersIndex + 1;
+
+      while (i < rawArgs.length && !rawArgs[i].startsWith("--")) {
+        let winnerId = rawArgs[i].trim();
+        if (winnerId.startsWith("<@") && winnerId.endsWith(">")) {
+          newWinners.push(winnerId.replace(/<@|>/g, "")); // Extract clean user IDs
+        }
+        i++;
+      }
+
+      rawArgs.splice(winnersIndex, newWinners.length + 1); // Remove winners from rawArgs
+
+      if (newWinners.length > 0) {
+        argsToPass.push("--winners", ...newWinners.map(id => `<@${id}>`)); // ✅ Append `--winners`
+      }
+    }
+
+
 
     console.log(`📌 [DEBUG] [startTemplate] Final Args to Pass:`, argsToPass);
 

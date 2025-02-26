@@ -89,21 +89,30 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
     console.log(`✅ [DEBUG] [minibossGiveaway.ts] Extracted Extra Fields:`, extraFields);
 
-
-
     let guaranteedWinners: string[] = [];
+
+// ✅ Process `--winners` from user input (only from command, not template)
     const winnersIndex = rawArgs.indexOf("--winners");
     if (winnersIndex !== -1) {
+        let newWinners: string[] = [];
         let i = winnersIndex + 1;
+
         while (i < rawArgs.length && !rawArgs[i].startsWith("--")) {
             let winnerId = rawArgs[i].trim();
             if (winnerId.startsWith("<@") && winnerId.endsWith(">")) {
-                guaranteedWinners.push(winnerId.replace(/<@|>/g, ""));
+                newWinners.push(winnerId.replace(/<@|>/g, "")); // Extract clean user IDs
             }
             i++;
         }
-        rawArgs.splice(winnersIndex, guaranteedWinners.length + 1);
+
+        rawArgs.splice(winnersIndex, newWinners.length + 1); // Remove winners from rawArgs
+
+        if (newWinners.length > 0) {
+            guaranteedWinners = newWinners; // ✅ Use only from command, not template
+        }
     }
+
+    console.log(`✅ [DEBUG] [minibossGiveaway.ts] Final Guaranteed Winners:`, guaranteedWinners);
 
     let roleId: string | null = null;
     if (guildSettings) {
@@ -117,6 +126,10 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     let forceStart: boolean = rawArgs.includes("--force");
+
+    if (savedGiveaway) {
+        forceStart = Boolean(savedGiveaway.get("forceStart")) || forceStart; // ✅ Convert to boolean first
+    }
 
     const roleMention = roleId ? `<@&${roleId}>` : "None";
     const currentTime = Math.floor(Date.now() / 1000);
