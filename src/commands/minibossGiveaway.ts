@@ -75,16 +75,30 @@ export async function execute(message: Message, rawArgs: string[]) {
         : {};
 
     for (let i = 0; i < rawArgs.length; i++) {
-        if (rawArgs[i] === "--field" && i + 1 < rawArgs.length) {
-            const rawField = rawArgs[i + 1].replace(/^"+|"+$/g, "").trim(); // Remove outer quotes
-            const [key, ...valueParts] = rawField.split(":");
-            if (key && valueParts.length) {
-                let value = valueParts.join(":").trim();
-                value = value.replace(/\\n/g, "\n"); // ✅ Convert `\n` from text to actual newline
-                extraFields[key] = value;
+        if ((rawArgs[i] === "--field" || rawArgs[i] === "--fields" )&& i + 1 < rawArgs.length) {
+            let rawField = rawArgs[i + 1];
+
+            // 🔍 Handle potential multi-word fields that were split
+            while (i + 2 < rawArgs.length && !rawArgs[i + 2].startsWith("--")) {
+                rawField += " " + rawArgs[i + 2];
+                rawArgs.splice(i + 2, 1); // Remove merged elements
             }
-            rawArgs.splice(i, 2);
-            i--; // Adjust index since we removed two elements
+
+            // ✅ Clean up quotes and split key:value correctly
+            rawField = rawField.replace(/^"+|"+$/g, "").trim(); // Remove outer quotes
+            const splitIndex = rawField.indexOf(":");
+            if (splitIndex !== -1) {
+                let key = rawField.substring(0, splitIndex).trim();
+                let value = rawField.substring(splitIndex + 1).trim();
+
+                value = value.replace(/\\n/g, "\n"); // Convert `\n` into actual newline
+
+                if (key.length > 0 && value.length > 0) {
+                    extraFields[key] = value;
+                }
+            }
+            rawArgs.splice(i, 2); // Remove processed `--field` and its argument
+            i--; // Adjust index
         }
     }
     console.log(`✅ [DEBUG] [minibossGiveaway.ts] Extracted Extra Fields:`, extraFields);
