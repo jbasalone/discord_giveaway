@@ -77,7 +77,7 @@ async function startBot() {
           console.log(`⏳ Expired Giveaway Found: ID ${giveaway.get("id")}`);
           await handleGiveawayEnd(client, giveaway.get("id"));
         }
-      }, 60 * 1000);
+      }, 30 * 1000);
     });
 
     client.on(Events.MessageCreate, async (message) => {
