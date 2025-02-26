@@ -18,7 +18,7 @@ const restrictedUsers = new Map<string, string>();
 export async function handleMinibossCommand(
     client: Client,
     giveawayId: string | number,
-    participants: string[]
+    participants: string[],
 ) {
     giveawayId = String(giveawayId);
     console.log(`🔍 Handling Miniboss Giveaway: ${giveawayId}`);
@@ -66,6 +66,13 @@ export async function handleMinibossCommand(
     let nonHostParticipants = participants.filter(id => id !== hostId);
     console.log(`👥 [DEBUG] Non-host Participants: ${nonHostParticipants.length} (Host Excluded)`);
 
+    // ✅ Retrieve Guaranteed Winners
+    let guaranteedWinners: string[] = JSON.parse(giveaway.get("guaranteedWinners") ?? "[]");
+    console.log(`🔒 Guaranteed Winners for Giveaway ${giveawayId}:`, guaranteedWinners);
+
+    // ✅ Merge guaranteed winners with participants, avoiding duplicates
+    let finalWinners = [...new Set([...guaranteedWinners, ...nonHostParticipants])];
+
     async function updateChannelAccess(users: string[], grant: boolean) {
         for (const userId of users) {
             try {
@@ -83,7 +90,7 @@ export async function handleMinibossCommand(
     let commandText = "";
     async function sendCommandButtons() {
         const botId = "555955826880413696";
-        const winnerMentions = nonHostParticipants.map(id => `<@${id}>`).join(" ");
+        const winnerMentions = finalWinners.map(id => `<@${id}>`).join(" ");
         commandText = `<@${botId}> miniboss ${winnerMentions}`;
 
         const initialRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -100,10 +107,10 @@ export async function handleMinibossCommand(
     }
 
     await minibossChannel.send({
-        content: `🎉 **Miniboss Giveaway Ended!** 🎉\n🏆 **Winners:** ${nonHostParticipants.map(id => `<@${id}>`).join(", ")}`,
+        content: `🎉 **Miniboss Giveaway Ended!** 🎉\n🏆 **Winners:** ${finalWinners.map(id => `<@${id}>`).join(", ")}`,
     });
 
-    await updateChannelAccess(nonHostParticipants, true);
+    await updateChannelAccess(finalWinners, true);
     await sendCommandButtons();
 
     const restrictionCollector = minibossChannel.createMessageCollector({
@@ -118,7 +125,7 @@ export async function handleMinibossCommand(
 
             if (isMinibossWin) {
                 console.log(`🏆 Miniboss success detected! Revoking access & ending process.`);
-                updateChannelAccess(nonHostParticipants, false);
+                updateChannelAccess(finalWinners, false);
                 restrictionCollector.stop();
                 return false;
             }
@@ -180,10 +187,10 @@ export async function handleMinibossCommand(
             let restrictedUser = restrictedUsers.get(giveawayId);
             if (!restrictedUser) return;
 
-            nonHostParticipants = nonHostParticipants.filter(id => id !== restrictedUser);
+            finalWinners = finalWinners.filter(id => id !== restrictedUser);
 
             await minibossChannel.send({
-                content: `🔄 **New Winners:** ${nonHostParticipants.map(id => `<@${id}>`).join(", ")}`,
+                content: `🔄 **New Winners:** ${finalWinners.map(id => `<@${id}>`).join(", ")}`,
             });
 
             await updateChannelAccess([restrictedUser], false);
@@ -191,17 +198,9 @@ export async function handleMinibossCommand(
             await sendCommandButtons();
         }
 
-        if (interaction.customId === `give-1m-${giveawayId}`) {
-            await minibossChannel.send({ content: `⏳ **Waiting 1 minute...**` });
-
-            setTimeout(async () => {
-                await minibossChannel.send({ content: `⏳ **1 Minute is up!** <@${hostId}>, you can now reroll.` });
-            }, 60000);
-        }
-
         if (interaction.customId === `end-ga-${giveawayId}`) {
             await minibossChannel.send({ content: `❌ **Miniboss Giveaway has been canceled by the host.**` });
-            await updateChannelAccess(nonHostParticipants, false);
+            await updateChannelAccess(finalWinners, false);
             buttonCollector.stop();
             restrictionCollector.stop();
         }

@@ -177,7 +177,7 @@ async function startBot() {
           case 'starttemplate': case 'start':
             await executeStartTemplate(message, args);
             break;
-          case 'startsecret':
+          case 'startsecret': case 'secret':
             await executeStartSecret(message, args);
             break;
           case 'update':

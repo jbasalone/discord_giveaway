@@ -70,17 +70,8 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
     const isForced = Boolean(Number(giveaway.get("forceStart")));
 
-    // ✅ **Retrieve Guaranteed Winners from Extra Fields**
-    let guaranteedWinners: string[] = [];
-    try {
-      const extraFields = JSON.parse(giveaway.get("extraFields") ?? "{}");
-      if (Array.isArray(extraFields.guaranteedWinners)) {
-        guaranteedWinners = extraFields.guaranteedWinners;
-      }
-    } catch (error) {
-      console.warn(`⚠️ Failed to parse guaranteed winners: ${error}`);
-    }
-
+    // ✅ **Retrieve Guaranteed Winners**
+    let guaranteedWinners: string[] = JSON.parse(giveaway.get("guaranteedWinners") ?? "[]");
     console.log(`🔒 Guaranteed Winners for Giveaway ${giveawayId}:`, guaranteedWinners);
 
     if (giveaway.get("type") === "miniboss") {
@@ -88,7 +79,9 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
       if (isForced || participants.length >= 9) {
         console.log(`🚀 **Proceeding with Miniboss Giveaway** (Forced: ${isForced}, Participants: ${participants.length})`);
-        await handleMinibossCommand(client, giveawayId, participants);
+
+        // ✅ **Pass Guaranteed Winners to Miniboss Command**
+        await handleMinibossCommand(client, giveawayId, [...new Set([...guaranteedWinners, ...participants])]);
       } else {
         console.warn(`❌ Miniboss Giveaway cannot proceed due to insufficient participants.`);
         return;
@@ -99,18 +92,11 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     let winnerList: string[] = [];
     const maxWinners = Number(giveaway.get("winnerCount"));
 
-    let useExtraEntries = false;
-    try {
-      const extraFields = JSON.parse(giveaway.get("extraFields") ?? "{}");
-      useExtraEntries = extraFields.useExtraEntries === "true";
-    } catch {
-      useExtraEntries = false;
-    }
+    // ✅ **Apply Extra Entries Bonus (Weight-based Selection)**
+    let useExtraEntries = Boolean(Number(giveaway.get("useExtraEntries")));
+    let participantsWithWeights: string[] = [];
 
-    const shouldUseExtraEntries = useExtraEntries || giveaway.get("type") === "giveaway" || giveaway.get("type") === "custom";
-    const participantsWithWeights: string[] = [];
-
-    if (shouldUseExtraEntries) {
+    if (useExtraEntries) {
       console.log(`📌 Applying extra entries for Giveaway ${giveawayId}.`);
 
       const extraEntriesData = await ExtraEntries.findAll({ where: { guildId } });
@@ -135,9 +121,12 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       participantsWithWeights.push(...participants);
     }
 
-    while (winnerList.length < maxWinners && participantsWithWeights.length > 0) {
-      const winnerIndex = Math.floor(Math.random() * participantsWithWeights.length);
-      const winner = participantsWithWeights.splice(winnerIndex, 1)[0];
+    // ✅ **Merge Guaranteed Winners & Randomly Pick Others**
+    let availableWinners = [...new Set([...guaranteedWinners, ...participantsWithWeights])];
+
+    while (winnerList.length < maxWinners && availableWinners.length > 0) {
+      const winnerIndex = Math.floor(Math.random() * availableWinners.length);
+      const winner = availableWinners.splice(winnerIndex, 1)[0];
 
       if (!winnerList.includes(winner)) {
         winnerList.push(winner);

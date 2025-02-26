@@ -13,6 +13,7 @@ export class Giveaway extends Model {
     public duration!: number;
     public endsAt!: number;
     public participants!: string;
+    public guaranteedWinners!: string;
     public winnerCount!: number;
     public extraFields!: string | null;
     public forceStart!: boolean;
@@ -66,6 +67,11 @@ Giveaway.init(
         participants: {
             type: DataTypes.TEXT,
             allowNull: false,
+            defaultValue: "[]"
+        },
+        guaranteedWinners: {
+            type: DataTypes.TEXT,
+            allowNull: true,
             defaultValue: "[]"
         },
         winnerCount: {
