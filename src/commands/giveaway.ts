@@ -53,39 +53,51 @@ export async function execute(message: Message, rawArgs: string[]) {
     // **Sanitize all incoming arguments**
     rawArgs = rawArgs.map(sanitizeArg);
 
-    let title = "";
-    let durationStr = "";
-    let winnerCountStr = "";
     let extraFields: Record<string, string> = {};
     let roleId: string | null = null;
     let hostId: string = message.author.id;
     let useExtraEntries = false;
 
-    // ✅ **Extract Arguments**
-    if (rawArgs.length === 2 || rawArgs.length === 3) {
-        // ✅ If the user provides only duration and winner count, assign a default title
-        title = "🎉 Giveaway Event!";
-        durationStr = sanitizeArg(rawArgs.shift());
-        winnerCountStr = sanitizeArg(rawArgs.shift());
+    // ✅ **Extract Title Properly**
+    let title = "";
+    if (rawArgs.length >= 3) {
+        if (rawArgs[0].startsWith('"')) {
+            // ✅ Extract title from quoted string
+            const quoteEndIndex = rawArgs.findIndex(arg => arg.endsWith('"'));
+            if (quoteEndIndex !== -1) {
+                title = rawArgs.splice(0, quoteEndIndex + 1).join(" ").replace(/^"|"$/g, "").trim();
+            } else {
+                title = rawArgs.shift() ?? "🎉 Giveaway Event!";
+            }
+        } else {
+            // ✅ If no quotes, assume all words before duration are part of the title
+            while (rawArgs.length > 2 && !rawArgs[0].match(/^\d+(s|m|h|d)$/)) {
+                title += (title ? " " : "") + rawArgs.shift();
+            }
+            title = title.trim() || "🎉 Giveaway Event!";
+        }
     } else {
-        // ✅ Extract Title, Duration, and Winner Count properly
-        title = sanitizeArg(rawArgs.shift()) || "🎉 Giveaway Event!";
-        durationStr = sanitizeArg(rawArgs.shift());
-        winnerCountStr = sanitizeArg(rawArgs.shift());
+        // ✅ Default title if no title is given
+        title = "🎉 Giveaway Event!";
     }
 
+// ✅ Extract Duration & Winner Count
+    const durationStr = sanitizeArg(rawArgs.shift());
+    const winnerCountStr = sanitizeArg(rawArgs.shift());
+
+// ✅ Ensure required values are provided
     if (!durationStr || !winnerCountStr) {
-        return message.reply("❌ Invalid format! Example: `!ga create \"Test Giveaway\" 30s 1 --role VIP --extraentries` or `!ga create 30s 1`.");
+        return message.reply("❌ Invalid format! Example: `!ga create \"Super Giveaway\" 30s 1` or `!ga create 30s 1`.");
     }
 
-    // ✅ Convert & Validate Duration
+// ✅ Convert & Validate Duration
     let durationMs = convertToMilliseconds(durationStr);
     if (isNaN(durationMs) || durationMs <= 0) {
         console.warn(`⚠️ [DEBUG] Invalid duration (${durationMs}) detected! Defaulting to 60s.`);
         durationMs = 60000;
     }
 
-    // ✅ Convert & Validate Winner Count
+// ✅ Convert & Validate Winner Count
     let winnerCount = parseInt(winnerCountStr, 10);
     if (isNaN(winnerCount) || winnerCount <= 0) {
         console.warn(`⚠️ [DEBUG] Invalid winner count (${winnerCount}) detected! Defaulting to 1.`);
@@ -94,12 +106,12 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     console.log(`🎯 [DEBUG] Processed Values -> Title: ${title}, Duration: ${durationMs}ms, WinnerCount: ${winnerCount}`);
 
-    // ✅ **Extract Additional Flags & Extra Fields**
     while (rawArgs.length > 0) {
         const arg = sanitizeArg(rawArgs.shift());
 
         if (arg === "--role" && rawArgs.length > 0) {
             roleId = sanitizeArg(rawArgs.shift());
+
         } else if (arg === "--host" && rawArgs.length > 0) {
             const mentionMatch = rawArgs[0]?.match(/^<@!?(\d+)>$/);
             hostId = mentionMatch ? mentionMatch[1] : sanitizeArg(rawArgs.shift());
@@ -119,7 +131,9 @@ export async function execute(message: Message, rawArgs: string[]) {
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
     const channel = message.channel as TextChannel;
 
-    let rolePing = roleId ? `<@&${roleId}>` : "";
+    let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
+    let resolvedRoleId = roleId && roleMappings[roleId] ? roleMappings[roleId] : null;
+    let rolePing = resolvedRoleId ? `<@&${resolvedRoleId}>` : "";
 
     // ✅ **Create Embed**
     const embed = new EmbedBuilder()
@@ -174,5 +188,4 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     startLiveCountdown(giveawayData.id, message.client);
 
-    return message.reply(`🎉 **${title}** started! Hosted by <@${hostId}>.`);
 }
