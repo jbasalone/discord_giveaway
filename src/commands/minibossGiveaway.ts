@@ -114,8 +114,60 @@ export async function execute(message: Message, rawArgs: string[]) {
     let title: string = "Miniboss Giveaway";
     let durationMs: number;
     let winnerCount: number = 1;
-    let extraFields: Record<string, string> = {};
+
+    // ✅ Extract Extra Fields Correctly (Handles Spaces & Multiple Words)
+    // ✅ Extract Extra Fields Correctly
+    let extraFields: Record<string, string> = savedGiveaway
+        ? JSON.parse(savedGiveaway.get("extraFields") || "{}")
+        : {};
+
+// ✅ Parse `--field` values from rawArgs
+    while (true) {
+        const keyFlagIndex = rawArgs.indexOf("--field");
+        if (keyFlagIndex !== -1 && keyFlagIndex + 1 < rawArgs.length) {
+            rawArgs.splice(keyFlagIndex, 1); // Remove `--field`
+            let keyValuePair = rawArgs.splice(keyFlagIndex, 1)[0]; // Capture the full field entry
+
+            // ✅ Handle cases where spaces split values
+            while (rawArgs.length > 0 && !rawArgs[0].startsWith("--")) {
+                keyValuePair += " " + rawArgs.shift();
+            }
+
+            // ✅ Ensure proper key-value parsing
+            const splitIndex = keyValuePair.indexOf(":");
+            if (splitIndex !== -1) {
+                let key = keyValuePair.substring(0, splitIndex).trim();
+                let value = keyValuePair.substring(splitIndex + 1).trim();
+
+                key = key.replace(/^"+|"+$/g, "");  // Remove surrounding quotes
+                value = value.replace(/^"+|"+$/g, "").replace(/\\n/g, "\n");  // Normalize newlines
+
+                if (key && value) {
+                    extraFields[key] = value;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    console.log(`✅ [DEBUG] [minibossGiveaway.ts] Extracted Extra Fields:`, extraFields);
+
     let guaranteedWinners: string[] = [];
+    const winnersIndex = rawArgs.indexOf("--winners");
+    if (winnersIndex !== -1 && winnersIndex + 1 < rawArgs.length) {
+        let i = winnersIndex + 1;
+        while (i < rawArgs.length && !rawArgs[i].startsWith("--")) {
+            let winnerId = rawArgs[i].trim();
+            if (winnerId.startsWith("<@") && winnerId.endsWith(">")) {
+                guaranteedWinners.push(winnerId.replace(/<@|>/g, "")); // Strip `<@>` for consistent formatting
+            }
+            i++;
+        }
+        rawArgs.splice(winnersIndex, guaranteedWinners.length + 1);
+    }
+    console.log(`✅ [DEBUG] [minibossGiveaway.ts] Extracted Guaranteed Winners:`, guaranteedWinners);
+
+
     let roleId: string | null = null;
 
     if (savedGiveaway) {
@@ -127,14 +179,14 @@ export async function execute(message: Message, rawArgs: string[]) {
         winnerCount = Number(savedGiveaway.get("winnerCount")) || 1;
         forceStart = Boolean(savedGiveaway.get("forceStart")) || args.options.includes("--force");
     } else {
-        // ✅ Manually started giveaway: convert from user input
-        if (rawArgs.length > 0) title = rawArgs.shift()!;
         if (rawArgs.length > 0) {
             let durationArg = rawArgs.shift();
             durationMs = durationArg ? convertToMilliseconds(durationArg) : 60000; // ✅ Convert manual input
         } else {
-            durationMs = 60000;
+            durationMs = 60000; // ✅ Default to 1 minute
         }
+
+        console.log(`✅ [DEBUG] [minibossGiveaway] Final Parsed Duration (ms): ${durationMs}`);
 
         if (rawArgs.length > 0) winnerCount = parseInt(rawArgs.shift()!, 10) || 1;
     }
@@ -174,7 +226,18 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     // ✅ **Parse Additional Arguments** (ONLY user inputs should be converted)
     if (rawArgs.length > 0) title = rawArgs.shift()!;
-    if (rawArgs.length > 0) durationMs = parseInt(rawArgs.shift()!, 10);
+    if (rawArgs.length > 0) {
+        let durationArg = rawArgs.shift();
+        durationMs = durationArg ? convertToMilliseconds(durationArg) : 60000;
+        if (isNaN(durationMs) || durationMs <= 0) {
+            console.warn(`⚠️ [DEBUG] Invalid duration detected! Defaulting to 1 minute.`);
+            durationMs = 60000; // Default 1 minute
+        }
+    } else {
+        durationMs = 60000; // ✅ Default to 1 minute
+    }
+
+    console.log(`✅ [DEBUG] [minibossGiveaway] Final Parsed Duration (ms): ${durationMs}`);
     if (rawArgs.length > 0) winnerCount = parseInt(rawArgs.shift()!, 10);
 
     while (rawArgs.length > 0) {
@@ -196,9 +259,9 @@ export async function execute(message: Message, rawArgs: string[]) {
         }
     }
 
-
-    // ✅ **Calculate End Time**
-    const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
+    const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
+    const endsAt = currentTime + Math.ceil(durationMs / 1000); // Ensure proper rounding
+    console.log(`✅ [DEBUG] [minibossGiveaway.ts] Calculated endsAt: ${endsAt} (Current: ${currentTime}, Duration: ${durationMs} ms)`);
     const hostId = message.author.id;
 
     // ✅ **Fetch Host's Stats**
@@ -219,7 +282,6 @@ export async function execute(message: Message, rawArgs: string[]) {
         }
     }
 
-    // ✅ **Create Giveaway Embed**
     const embed = new EmbedBuilder()
         .setTitle(`🎊 **MB Giveaway - Level ${userLevel} (TT ${ttLevel})** 🎊`)
         .setDescription(`**Host:** <@${hostId}>\n**Server:** ${message.guild?.name}`)
@@ -230,12 +292,13 @@ export async function execute(message: Message, rawArgs: string[]) {
             { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
             { name: "🎟️ Total Participants", value: "0 users", inline: true },
             { name: "🏆 Guaranteed Winners", value: guaranteedWinners.length > 0 ? guaranteedWinners.map(id => `<@${id}>`).join(", ") : "None", inline: true }
-
         ]);
 
+// ✅ Ensure `--fields` Are Added to Embed
     for (const [key, value] of Object.entries(extraFields)) {
-        embed.addFields({ name: key, value: value.replace(/\\n/g, '\n'), inline: true });
+        embed.addFields({ name: key, value: value, inline: true });
     }
+
     if (roleId) {
         await channel.send(`<${roleId}> **MB Giveaway** - Level ${userLevel}`);
     }
