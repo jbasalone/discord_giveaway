@@ -71,20 +71,18 @@ export async function execute(message: Message, rawArgs: string[]) {
         templateId = parseInt(rawArgs.shift()!, 10);
         console.log(`📌 Using Saved Template ID: ${templateId}`);
 
-        savedGiveaway = await SavedGiveaway.findOne({ where: { id: templateId } });
+        let savedGiveaway: SavedGiveaway | null = await SavedGiveaway.findOne({ where: { id: templateId } });
 
         if (!savedGiveaway) {
             return message.reply(`❌ No saved giveaway found with ID: ${templateId}`);
         }
 
-        // ✅ Load data from template
-        title = savedGiveaway.title;
-        durationStr = savedGiveaway.duration.toString();
-        winnerCountStr = savedGiveaway.winnerCount.toString();
-        extraFields = JSON.parse(savedGiveaway.extraFields ?? "{}");
-        roleId = savedGiveaway.role;
+        title = savedGiveaway.get("title") || "Giveaway";
+        durationStr = savedGiveaway.get("duration").toString();
+        winnerCountStr = savedGiveaway.get("winnerCount").toString();
+        extraFields = JSON.parse(savedGiveaway.get("extraFields") || "{}");
+        roleId = savedGiveaway.get("role") ?? null;
     } else {
-        // ✅ **Extract Proper Arguments for Custom Giveaways**
         title = sanitizeArg(rawArgs.shift());
         durationStr = sanitizeArg(rawArgs.shift());
         winnerCountStr = sanitizeArg(rawArgs.shift());
@@ -109,6 +107,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     console.log(`🎯 [DEBUG] Processed Values -> Title: ${title}, Duration: ${durationMs}ms, WinnerCount: ${winnerCount}`);
+
 
     // ✅ **Extract Additional Flags & Extra Fields**
     while (rawArgs.length > 0) {

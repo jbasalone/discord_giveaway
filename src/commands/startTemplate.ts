@@ -50,7 +50,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     let argsToPass: string[] = [
       String(templateId),
-      `"${title}"`,
+      String(title),
       String(durationMs),
       String(parsedWinnerCount)
     ];
