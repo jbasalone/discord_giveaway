@@ -130,7 +130,7 @@ async function startBot() {
             await executeListMBRoles(message, guildId);
             break;
           case 'listtemplates': case 'listtemp': case 'listtemplate':
-            await executeListTemplates(message);
+            await executeListTemplates(message, args);
             break;
           case 'miniboss': case 'mb':
             await executeMinibossGiveaway(message, args);

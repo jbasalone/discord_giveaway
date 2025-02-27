@@ -100,13 +100,16 @@ export async function handleHelpSelection(interaction: Interaction) {
             "template": [
                 { name: "💾 Save a Giveaway Template", value: `\`${prefix} ga save --type <custom|miniboss> <name> <duration> [winners]\`` },
                 { name: "🚀 Start a Giveaway from a Saved Template", value: `\`${prefix} ga starttemplate <ID>\`` },
-                { name: "📜 List All Saved Giveaway Templates", value: `\`${prefix} ga listtemplates\`` },
-                { name: "❌ Delete a Saved Template", value: `\`${prefix} ga deletetemplate <ID>\`` },
+                { name: "📜 List All Saved Giveaway Templates", value: `\`${prefix} ga listtemplates --all\`` },
+                { name: "📜 List Your Saved Giveaway Templates", value: `\`${prefix} ga listtemplates --mine\`` },
+                { name: "❌ Delete a Saved Template", value: `\`${prefix} ga delete <ID>\`` },
                 { name: "Optional Flags: `[--host]`", value: "- Sets a host for the giveaway, defaults to you." },
                 { name: "Optional Flags: `[--field \"name: value\"]`", value: "- Sets custom embed fields (e.g., `req: Level 50+`)." },
                 { name: "Optional Flags: `[--role \"rolename\"]`", value: "- Pings a role when the giveaway starts." },
                 { name: "Optional Flags: `[--extraentries]`", value: "- Gives Users Extra Entries based on server config." },
                 { name: "Optional Flags: `[--force]`", value: "- Allows **Miniboss giveaways** to start with fewer participants." },
+                { name: "Optional Flags: `[--mine/all]`", value: "- lists only your templates or all templates." },
+
             ],
             "admin": [
                 { name: "⚙️ Show Server Giveaway Settings", value: `\`${prefix} ga showconfig\`` },
