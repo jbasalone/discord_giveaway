@@ -102,6 +102,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "🚀 Start a Giveaway from a Saved Template", value: `\`${prefix} ga starttemplate <ID>\`` },
                 { name: "📜 List All Saved Giveaway Templates", value: `\`${prefix} ga listtemplates --all\`` },
                 { name: "📜 List Your Saved Giveaway Templates", value: `\`${prefix} ga listtemplates --mine\`` },
+                { name: "🛠 Edit Your Template", value: `\`${prefix} ga edit 2 --role @GiveawayPings --field "Reward: Nitro"\`` },
                 { name: "❌ Delete a Saved Template", value: `\`${prefix} ga delete <ID>\`` },
                 { name: "Optional Flags: `[--host]`", value: "- Sets a host for the giveaway, defaults to you." },
                 { name: "Optional Flags: `[--field \"name: value\"]`", value: "- Sets custom embed fields (e.g., `req: Level 50+`)." },
