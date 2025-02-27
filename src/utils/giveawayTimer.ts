@@ -4,7 +4,6 @@ import { handleGiveawayEnd } from '../events/giveawayEnd';
 
 export async function startLiveCountdown(giveawayId: number, client: Client) {
     try {
-        console.log(`🔍 Checking countdown for Giveaway ID: ${giveawayId}`);
 
         let giveaway = await Giveaway.findByPk(giveawayId);
         if (!giveaway) {

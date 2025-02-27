@@ -12,6 +12,7 @@ import { Giveaway } from "../models/Giveaway";
 import { startLiveCountdown } from "../utils/giveawayTimer";
 import { client } from "../index";
 import { SecretGiveawaySettings } from "../models/SecretGiveaway";
+import { updateSecretGiveawaySummary } from "../utils/secretGiveawayUtils";
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -26,6 +27,8 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (!settings || !settings.get("enabled")) {
         return message.reply("❌ Secret giveaways are not enabled on this server.");
     }
+
+    
 
     // ✅ **Extract & Validate Arguments**
     const maxWinners = parseInt(rawArgs[0]) || 5;
@@ -85,7 +88,7 @@ async function startSecretGiveaway(guild: Guild, maxWinners: number, durationHou
         console.log(`📌 Scheduled ${scheduledMessages.length} messages over ${durationHours} hours.`);
 
         // ✅ **Start Scheduler**
-        checkForScheduledMessages(scheduledMessages, maxWinners, messageContent);
+        checkForScheduledMessages(scheduledMessages, maxWinners, messageContent, guild, durationHours);
     } catch (error) {
         console.error("❌ Error scheduling Secret Giveaway messages:", error);
     }
@@ -95,7 +98,9 @@ async function startSecretGiveaway(guild: Guild, maxWinners: number, durationHou
 async function checkForScheduledMessages(
     scheduledMessages: { channelId: string; sendTime: number }[],
     maxWinners: number,
-    messageContent: string
+    messageContent: string,
+    guild: Guild,
+    durationHours: number
 ) {
     setInterval(async () => {
         const now = Date.now();
@@ -104,7 +109,7 @@ async function checkForScheduledMessages(
                 const { channelId } = scheduledMessages[i];
                 const channel = client.channels.cache.get(channelId) as TextChannel;
                 if (channel) {
-                    await sendSecretGiveawayMessage(channel, maxWinners, messageContent);
+                    await sendSecretGiveawayMessage(channel, maxWinners, messageContent, guild, durationHours);
                 }
                 scheduledMessages.splice(i, 1);
                 i--;
@@ -114,7 +119,13 @@ async function checkForScheduledMessages(
 }
 
 // ✅ **Send Secret Giveaway Message**
-async function sendSecretGiveawayMessage(channel: TextChannel, maxWinners: number, messageContent: string) {
+async function sendSecretGiveawayMessage(
+    channel: TextChannel,
+    maxWinners: number,
+    messageContent: string,
+    guild: Guild,
+    durationHours: number
+) {
     try {
         console.log(`📨 Sending Secret Giveaway to #${channel.name}`);
 
@@ -135,41 +146,28 @@ async function sendSecretGiveawayMessage(channel: TextChannel, maxWinners: numbe
 
         const secretMessage = await channel.send({ embeds: [embed], components: [row] });
 
-        // ✅ **Save Giveaway in Database**
+        const durationMs = durationHours * 60 * 60 * 1000; // ✅ Convert hours to milliseconds
+        const endsAt = Math.floor((Date.now() + durationMs) / 1000); // ✅ Convert to timestamp correctly
+
         const giveawayData = await Giveaway.create({
-            guildId: channel.guild.id,
+            guildId: guild.id,
             host: client.user?.id || "Bot",
             channelId: channel.id,
             messageId: secretMessage.id,
             title: "Secret Giveaway",
             description: "A hidden giveaway has started in this channel!",
             type: "secret",
-            duration: 60000,
-            endsAt: Math.floor(Date.now() / 1000) + 60,
+            duration: durationMs, // ✅ Ensure duration is correct
+            endsAt, // ✅ Correctly set end timestamp
             participants: JSON.stringify([]),
             winnerCount: maxWinners,
             extraFields: JSON.stringify({ isSecret: true }),
-            forceStart: true
+            forceStart: true,
         });
 
         startLiveCountdown(giveawayData.id, client);
+        await updateSecretGiveawaySummary(guild.id);
         console.log(`✅ Secret Giveaway sent in #${channel.name}`);
-
-        // ✅ **Set Timeout to Remove Buttons**
-        setTimeout(async () => {
-            try {
-                const expiredEmbed = EmbedBuilder.from(secretMessage.embeds[0])
-                    .setColor("DarkGrey")
-                    .setFields([
-                        { name: "⏳ Giveaway Expired", value: "This giveaway has ended." }
-                    ]);
-
-                await secretMessage.edit({ embeds: [expiredEmbed], components: [] });
-                console.log(`🚫 Secret Giveaway Buttons Removed in #${channel.name}`);
-            } catch (error) {
-                console.error("❌ Error removing giveaway buttons:", error);
-            }
-        }, 60000); //
 
     } catch (error) {
         console.error("❌ Error sending Secret Giveaway:", error);

@@ -1,4 +1,4 @@
-import { ButtonInteraction } from "discord.js";
+import { ButtonInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { Giveaway } from "../models/Giveaway";
 
 export async function handleSecretGiveawayButton(interaction: ButtonInteraction) {
@@ -38,10 +38,27 @@ export async function handleSecretGiveawayButton(interaction: ButtonInteraction)
 
         console.log(`🎉 [WINNER ADDED] ${user.username} joined the secret giveaway!`);
 
+        // ✅ **Disable Buttons After Joining**
+        const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId("secret-join").setLabel("✅ Joined").setStyle(ButtonStyle.Secondary).setDisabled(true),
+            new ButtonBuilder().setCustomId("secret-ignore").setLabel("❌ Ignored").setStyle(ButtonStyle.Secondary).setDisabled(true)
+        );
+
+        await interaction.update({ components: [updatedRow] });
+
         return interaction.reply({ content: "🎉 You have joined the **Secret Giveaway**! Check back later to see if you won!", ephemeral: true });
 
     } else if (customId === "secret-ignore") {
         console.log(`🚫 [IGNORED] ${user.username} ignored the secret giveaway.`);
+
+        // ✅ **Disable Buttons When Ignored**
+        const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId("secret-join").setLabel("✅ Joined").setStyle(ButtonStyle.Secondary).setDisabled(true),
+            new ButtonBuilder().setCustomId("secret-ignore").setLabel("❌ Ignored").setStyle(ButtonStyle.Secondary).setDisabled(true)
+        );
+
+        await interaction.update({ components: [updatedRow] });
+
         return interaction.reply({ content: "🔕 You ignored this giveaway.", ephemeral: true });
     }
 }
