@@ -9,7 +9,7 @@ export class Giveaway extends Model {
     public messageId!: string;
     public title!: string;
     public description!: string;
-    public type!: 'custom' | 'miniboss' | 'giveaway';
+    public type!: 'custom' | 'miniboss' | 'giveaway' | 'secret';
     public duration!: number;
     public endsAt!: number;
     public participants!: string;
@@ -52,9 +52,9 @@ Giveaway.init(
             allowNull: false
         },
         type: {
-            type: DataTypes.ENUM('custom', 'miniboss', 'giveaway'),
+            type: DataTypes.ENUM("custom", "miniboss", "quick", "secret"),
             allowNull: false,
-            defaultValue: 'custom'
+            defaultValue: "custom"
         },
         duration: {
             type: DataTypes.INTEGER,

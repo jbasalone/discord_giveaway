@@ -47,6 +47,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     console.log(`🚀 Starting [startTemplate] ${type === "miniboss" ? "Miniboss" : "Custom"} Giveaway with Template ID: ${templateId}`);
     console.log(`🎯 [DEBUG] [startTemplate] Extracted Values -> Title: ${title}, Duration: ${durationMs}, Winners: ${parsedWinnerCount}`);
+    console.log(`🚀 Starting [startTemplate] ${type} Giveaway with Template ID: ${templateId}`);
 
     let argsToPass: string[] = [
       String(templateId),
@@ -66,29 +67,61 @@ export async function execute(message: Message, rawArgs: string[]) {
       argsToPass.push("--role", role);
     }
 
-    // ✅ Extract `--winners` from `rawArgs` and pass it to `minibossGiveaway.ts`
-    const winnersIndex = rawArgs.indexOf("--winners");
-    if (winnersIndex !== -1) {
-      let newWinners: string[] = [];
-      let i = winnersIndex + 1;
+    // ✅ Extract winners from the saved template
+    let winnersFromTemplate: string[] = [];
 
+    try {
+      const savedWinners = savedGiveaway.get("guaranteedWinners");
+
+      // Ensure savedWinners is a valid string before parsing
+      let formattedWinners: string = "";
+
+      if (Array.isArray(savedWinners)) {
+        formattedWinners = JSON.stringify(savedWinners);
+      } else if (typeof savedWinners === "string") {
+        formattedWinners = savedWinners;
+      } else {
+        formattedWinners = "[]";
+      }
+
+      winnersFromTemplate = JSON.parse(formattedWinners);
+
+      // Ensure it's always an array
+      if (!Array.isArray(winnersFromTemplate)) {
+        winnersFromTemplate = [];
+      }
+    } catch (error) {
+      console.error("❌ Error parsing guaranteed winners from template:", error);
+      winnersFromTemplate = [];
+    }
+
+    console.log(`📌 [DEBUG] [startTemplate] Template Winners:`, winnersFromTemplate);
+
+// ✅ Extract manually provided `--winners`
+    const winnersIndex = rawArgs.indexOf("--winners");
+    let manualWinners: string[] = [];
+
+    if (winnersIndex !== -1) {
+      let i = winnersIndex + 1;
       while (i < rawArgs.length && !rawArgs[i].startsWith("--")) {
         let winnerId = rawArgs[i].trim();
         if (winnerId.startsWith("<@") && winnerId.endsWith(">")) {
-          newWinners.push(winnerId.replace(/<@|>/g, "")); // Extract clean user IDs
+          manualWinners.push(winnerId.replace(/<@|>/g, ""));
         }
         i++;
       }
-
-      rawArgs.splice(winnersIndex, newWinners.length + 1); // Remove winners from rawArgs
-
-      if (newWinners.length > 0) {
-        argsToPass.push("--winners", ...newWinners.map(id => `<@${id}>`)); // ✅ Append `--winners`
-      }
+      rawArgs.splice(winnersIndex, manualWinners.length + 1);
     }
 
+// ✅ Merge winners safely (Avoiding `['[', ']']` issue)
+    let finalWinners = [...new Set([...winnersFromTemplate, ...manualWinners])].filter(id => id.length > 0 && !id.includes("[") && !id.includes("]"));
 
+    console.log(`📌 [DEBUG] [startTemplate] Final Winners:`, finalWinners);
 
+    if (finalWinners.length > 0) {
+      argsToPass.push("--winners", ...finalWinners.map(id => `<@${id}>`));
+    }
+    console.log(`📌 [DEBUG] [startTemplate] Final Winners:`, finalWinners);
     console.log(`📌 [DEBUG] [startTemplate] Final Args to Pass:`, argsToPass);
 
     // ✅ Ensure the correct function is called
