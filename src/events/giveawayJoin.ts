@@ -1,14 +1,14 @@
-import { ButtonInteraction, EmbedBuilder } from 'discord.js';
+import { ButtonInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { BlacklistedRoles } from '../models/BlacklistedRoles';
 import { cache } from '../utils/giveawayCache';
 
-const userCooldowns = new Map<string, number>();
+// ✅ Cooldown system (per giveaway)
+const userCooldowns = new Map<string, Map<string, number>>();
 const cooldownTime = 10 * 1000;
 
 export async function executeJoinLeave(interaction: ButtonInteraction) {
   try {
-
     if (!interaction.customId.startsWith('join-') && !interaction.customId.startsWith('leave-')) return;
 
     const isJoining = interaction.customId.startsWith('join-');
@@ -40,10 +40,15 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
     let participants: string[] = JSON.parse(giveaway.get('participants') || '[]');
     const alreadyJoined = participants.includes(userId);
 
-    if (userCooldowns.has(userId) && Date.now() - userCooldowns.get(userId)! < cooldownTime) {
+    // ✅ **Per-Giveaway Cooldown Check**
+    if (!userCooldowns.has(userId)) userCooldowns.set(userId, new Map());
+    const userGiveawayCooldowns = userCooldowns.get(userId)!;
+
+    if (userGiveawayCooldowns.has(giveawayMessageId) && Date.now() - userGiveawayCooldowns.get(giveawayMessageId)! < cooldownTime) {
       return await interaction.reply({ content: '⚠️ Please wait before joining/leaving again!', ephemeral: true });
     }
-    userCooldowns.set(userId, Date.now());
+
+    userGiveawayCooldowns.set(giveawayMessageId, Date.now());
 
     if (isJoining && alreadyJoined) {
       return await interaction.reply({ content: '⚠️ You have already joined this giveaway!', ephemeral: true });
@@ -61,7 +66,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       return await interaction.reply({ content: "❌ You are **blacklisted** from joining giveaways!", ephemeral: true });
     }
 
-    // ✅ If user is not blacklisted, process join/leave
+    // ✅ **Update Participants**
     if (isJoining) {
       participants.push(userId);
     } else {
@@ -70,7 +75,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     await giveaway.update({ participants: JSON.stringify(participants) });
 
-    // Preserve existing embed fields instead of adding duplicates
+    // ✅ **Update Embed**
     let embed = EmbedBuilder.from(interaction.message.embeds[0]);
 
     // Ensure fields exist before accessing
@@ -89,7 +94,20 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       embed.addFields({ name: '🎟️ Total Participants', value: `${participants.length} users`, inline: true });
     }
 
-    await interaction.message.edit({ embeds: [embed] });
+    // ✅ **Modify Buttons Dynamically (Only Affect Buttons)**
+    const updatedButtons = interaction.message.components.map(row => {
+      return new ActionRowBuilder<ButtonBuilder>().addComponents(
+          row.components
+              .filter(component => component.type === 2) // ✅ Only process buttons (type 2 in Discord API)
+              .map(component =>
+                  ButtonBuilder.from(component as unknown as ButtonBuilder).setDisabled(
+                      component.customId === `join-${giveawayMessageId}` ? isJoining : !isJoining
+                  )
+              )
+      );
+    });
+
+    await interaction.message.edit({ embeds: [embed], components: updatedButtons });
 
     // ✅ **Prevent "Interaction Failed" and send confirmation**
     await interaction.deferUpdate().catch(() => {
