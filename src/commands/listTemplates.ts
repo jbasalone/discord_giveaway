@@ -23,6 +23,7 @@ export async function execute(message: Message) {
     templates.forEach((template) => {
       const id = template.get("id") ?? "N/A"; // ✅ Display ID separately
       const name = template.get("name") ?? "Unknown";
+      const creatorId = template.get("creator") ?? "Unknown";
       const type = String(template.get("type") || "custom").toLowerCase(); //
       const isMiniboss = type === "miniboss";
       const winnerCount = Number(template.get("winnerCount") || 1); //
@@ -48,7 +49,7 @@ export async function execute(message: Message) {
           .join("\n");
 
       // ✅ **Build Giveaway Information**
-      let giveawayInfo = `🆔 **ID**: ${id}\n🏆 **Winners**: ${winnerCount}\n⏳ **Duration**: ${durationFormatted}\n📝 **Type**: ${type.toUpperCase()}`;
+      let giveawayInfo = `🆔 **ID**: ${id}\n👤 **Created By:** <@${creatorId}>\n🏆 **Winners**: ${winnerCount}\n⏳ **Duration**: ${durationFormatted}\n📝 **Type**: ${type.toUpperCase()}`;
 
       if (isMiniboss) {
         giveawayInfo += `\n🔥 **Forced Mode**: ${forceMode ? "Enabled ✅" : "Disabled ❌"}`;

@@ -65,12 +65,17 @@ SavedGiveaway.init(
         },
         role: {
             type: DataTypes.STRING,
-            allowNull: false,
+            allowNull: true,
+            defaultValue: null,
         },
         host: {
             type: DataTypes.STRING,
             allowNull: false,
-        }
+        },
+        creator: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
     },
     {
         sequelize,
