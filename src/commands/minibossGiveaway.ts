@@ -15,6 +15,7 @@ import { AllowedGiveawayChannels } from "../models/AllowedGiveawayChannels";
 import { MinibossRoles } from "../models/MinibossRoles";
 import { convertToMilliseconds } from "../utils/convertTime";
 import { GuildSettings } from "../models/GuildSettings";
+import { Op } from "sequelize";
 
 async function getUserMinibossStats(userId: string): Promise<{ userLevel: number, ttLevel: number } | null> {
     try {
@@ -47,6 +48,14 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) return message.reply("❌ This command must be used inside a server.");
     const channel = message.channel as TextChannel;
     const guildId = message.guild.id;
+
+    const activeMiniboss = await Giveaway.findOne({
+        where: { guildId, type: "miniboss", endsAt: { [Op.gt]: Math.floor(Date.now() / 1000) } },
+    });
+
+    if (activeMiniboss) {
+        return message.reply("⚠️ A **Miniboss Giveaway** is already running! Please wait until it ends before starting another.");
+    }
 
     const allowedRoles = await MinibossRoles.findAll({ where: { guildId } });
     const allowedRoleIds = allowedRoles.map(role => role.get('roleId')).filter(Boolean);
@@ -105,26 +114,37 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     let guaranteedWinners: string[] = [];
 
-// ✅ Process `--winners` from user input (only from command, not template)
-    const winnersIndex = rawArgs.indexOf("--winners");
-    if (winnersIndex !== -1) {
-        let newWinners: string[] = [];
-        let i = winnersIndex + 1;
+    if (savedGiveaway) {
+        try {
+            const savedWinners = savedGiveaway.get("guaranteedWinners");
+            const winnersString = typeof savedWinners === "string" ? savedWinners : "[]"; // Ensure it's a string
+            guaranteedWinners = JSON.parse(winnersString);
+        } catch (error) {
+            console.error("❌ Error parsing guaranteed winners from template:", error);
+            guaranteedWinners = [];
+        }
+    }
 
+    console.log(`✅ [DEBUG] [minibossGiveaway.ts] Template Winners:`, guaranteedWinners);
+
+// ✅ Process manual winners from `--winners`
+    const winnersIndex = rawArgs.indexOf("--winners");
+    let manualWinners: string[] = [];
+
+    if (winnersIndex !== -1) {
+        let i = winnersIndex + 1;
         while (i < rawArgs.length && !rawArgs[i].startsWith("--")) {
             let winnerId = rawArgs[i].trim();
             if (winnerId.startsWith("<@") && winnerId.endsWith(">")) {
-                newWinners.push(winnerId.replace(/<@|>/g, "")); // Extract clean user IDs
+                manualWinners.push(winnerId.replace(/<@|>/g, ""));
             }
             i++;
         }
-
-        rawArgs.splice(winnersIndex, newWinners.length + 1); // Remove winners from rawArgs
-
-        if (newWinners.length > 0) {
-            guaranteedWinners = newWinners; // ✅ Use only from command, not template
-        }
+        rawArgs.splice(winnersIndex, manualWinners.length + 1);
     }
+
+// ✅ Merge both manual and template winners, ensuring no duplicates
+    guaranteedWinners = [...new Set([...guaranteedWinners, ...manualWinners])];
 
     console.log(`✅ [DEBUG] [minibossGiveaway.ts] Final Guaranteed Winners:`, guaranteedWinners);
 
