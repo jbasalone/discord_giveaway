@@ -21,7 +21,7 @@ export async function updateGiveawayEmbed(giveaway: Giveaway, client: Client) {
         try {
             giveawayMessage = await channel.messages.fetch(giveaway.messageId);
         } catch (error) {
-            console.error(`❌ Could not fetch giveaway message ${giveaway.messageId}. Skipping update.`);
+            console.error(`[ERROR] [updateGivewayEmbed.ts] ❌ Could not fetch giveaway message ${giveaway.messageId}. Skipping update.`);
             return;
         }
 

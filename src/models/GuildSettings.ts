@@ -1,50 +1,32 @@
-import { DataTypes, Model } from 'sequelize';
-import { sequelize } from '../database';
+import { DataTypes, Model } from "sequelize";
+import { sequelize } from "../database";
 
-class GuildSettings extends Model {
+export class GuildSettings extends Model {
     public guildId!: string;
     public defaultGiveawayRoleId!: string | null;
-    public prefix!: string;
+    public defaultGiveawayChannelId!: string | null;  // ✅ Add this property
     public minibossChannelId!: string | null;
-    public allowedRoles!: string | null;
-    public roleMappings!: string | null;
+    public allowedRoles!: string;
+    public roleMappings!: string;
+    public prefix!: string;
+
 }
 
-GuildSettings.init({
-    guildId: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        primaryKey: true
+GuildSettings.init(
+    {
+        guildId: {type: DataTypes.STRING, primaryKey: true},
+        defaultGiveawayRoleId: {type: DataTypes.STRING, allowNull: true},
+        defaultGiveawayChannelId: {type: DataTypes.STRING, allowNull: true}, // ✅ Add this column
+        minibossChannelId: {type: DataTypes.STRING, allowNull: true},
+        allowedRoles: {type: DataTypes.TEXT, allowNull: false},
+        roleMappings: {type: DataTypes.TEXT, allowNull: false},
+        prefix: {type: DataTypes.STRING, allowNull: false, defaultValue: "!ga"
+        },
     },
-    defaultGiveawayRoleId: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    prefix: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        defaultValue: "!ga"
-    },
-    minibossChannelId: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    allowedRoles: {
-        type: DataTypes.TEXT,  // ✅ JSON string of roles who can start GAs
-        allowNull: true,
-        defaultValue: "{}"
-    },
-    roleMappings: {
-        type: DataTypes.TEXT,  // ✅ JSON string of role mappings for pings
-        allowNull: true,
-        defaultValue: "{}"
+    {
+        sequelize,
+        modelName: "GuildSettings",
+        tableName: "guild_settings",
+        timestamps: false,
     }
-}, {
-    sequelize,
-    modelName: 'GuildSettings',
-    tableName: 'guild_settings',
-    timestamps: false,
-    freezeTableName: true
-});
-
-export { GuildSettings };
+);

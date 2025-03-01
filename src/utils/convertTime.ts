@@ -1,20 +1,16 @@
-export function convertToMilliseconds(timeString: string): number {
-  const timeRegex = /^(\d+)(s|m|h|d)$/; // Matches 10s, 5m, 2h, 1d, etc.
-  const match = timeString.match(timeRegex);
+export function convertToMilliseconds(time: string | number): number {
+  if (typeof time === "number") return time; // Already in ms
+  if (!time) return NaN;
 
-  if (!match) {
-    console.warn(`⚠️ Invalid time format: ${timeString}`);
-    return NaN; // Invalid format
-  }
+  const match = time.match(/(\d+)(s|m|h|d)/);
+  if (!match) return NaN;
 
   const value = parseInt(match[1], 10);
-  const unit = match[2];
-
-  switch (unit) {
-    case 's': return value * 1000; // Seconds to milliseconds
-    case 'm': return value * 60 * 1000; // Minutes to milliseconds
-    case 'h': return value * 60 * 60 * 1000; // Hours to milliseconds
-    case 'd': return value * 24 * 60 * 60 * 1000; // Days to milliseconds
+  switch (match[2]) {
+    case "s": return value * 1000;
+    case "m": return value * 60000;
+    case "h": return value * 3600000;
+    case "d": return value * 86400000;
     default: return NaN;
   }
 }

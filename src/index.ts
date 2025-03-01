@@ -13,7 +13,14 @@ import { Giveaway } from './models/Giveaway';
 import { Op } from 'sequelize';
 import { handleSecretGiveawayButton } from "./events/handleSecretGiveawayButton";
 
+// ✅ Giveaway Scheduling Commands
+import { execute as executeScheduleGiveaway } from './commands/scheduleGiveaway';
+import { execute as executeListSchedule } from './commands/listSchedule';
+import { execute as executeCancelSchedule } from './commands/cancelSchedule';
+import { checkScheduledGiveaways } from './utils/checkScheduledGiveaways';
 
+
+// ✅ Existing Commands
 import { execute as executeSetLevel } from './commands/setLevel';
 import { execute as executeEditTemplate } from './commands/editTemplate';
 import { execute as executeStartTemplate } from './commands/startTemplate';
@@ -33,15 +40,15 @@ import { execute as executeListRoles } from './commands/listRoles';
 import { execute as executeListGiveaways } from './commands/checkGiveaway';
 import { execute as executeBlacklistedRoles } from './commands/setBlacklistedRoles';
 import { execute as executesetChannel } from './commands/setChannel';
-import { execute as executeListMBRoles } from './commands/listMinibossRoles'
-import { execute as executeMyLevel } from './commands/myLevel'
-import { execute as executeSetAccess } from './commands/BotAccess'
-import { execute as executeListAccess } from './commands/listAuthorizedGuilds'
-import { execute as executeSetSecret } from './commands/setSecret'
-import { execute as executeStartSecret } from './commands/startSecretGiveaway'
-import { execute as executeSetSummary } from './commands/setSummary'
-import { execute as executeBugCreate } from './commands/bugs'
-import {execute as executeUpdateBug } from './commands/updateBug'
+import { execute as executeListMBRoles } from './commands/listMinibossRoles';
+import { execute as executeMyLevel } from './commands/myLevel';
+import { execute as executeSetAccess } from './commands/BotAccess';
+import { execute as executeListAccess } from './commands/listAuthorizedGuilds';
+import { execute as executeSetSecret } from './commands/setSecret';
+import { execute as executeStartSecret } from './commands/startSecretGiveaway';
+import { execute as executeSetSummary } from './commands/setSummary';
+import { execute as executeBugCreate } from './commands/bugs';
+import { execute as executeUpdateBug } from './commands/updateBug';
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -78,7 +85,15 @@ async function startBot() {
           await handleGiveawayEnd(client, giveaway.get("id"));
         }
       }, 30 * 1000);
+      setInterval(async () => {
+        await checkScheduledGiveaways(client);
+      }, 30 * 1000);
+      setInterval(async () => {
+        await checkScheduledGiveaways(client);
+      }, 5 * 60 * 1000);
     });
+
+
 
     client.on(Events.MessageCreate, async (message) => {
       if (message.author.bot || !message.guild) return;
@@ -99,9 +114,18 @@ async function startBot() {
 
       try {
         switch (command) {
+          case 'schedule':
+            await executeScheduleGiveaway(message, args);
+            break;
+          case 'listschedule': case 'listscheduled': case 'scheduled':
+            await executeListSchedule(message, args);
+            break;
+          case 'cancelschedule': case 'cancel':
+            await executeCancelSchedule(message, args);
+            break;
           case 'bug':
-              await executeBugCreate(message);
-              break;
+            await executeBugCreate(message);
+            break;
           case 'create': case 'quick':
             await executeGiveaway(message, args);
             break;
@@ -162,23 +186,23 @@ async function startBot() {
           case 'setlevel': case 'level':
             await executeSetLevel(message, args);
             break;
-          case 'setrole': case 'setroles':
-            await executeSetRole(message, args);
-            break;
-          case 'setsummary':
-            await executeSetSummary(message, args);
-            break;
           case 'setminibosschannel': case 'setmbch':
             await executeSetMinibossChannel(message, args);
             break;
           case 'setsecret':
             await executeSetSecret(message, args);
             break;
-          case 'starttemplate': case 'start':
-            await executeStartTemplate(message, args);
+          case 'setrole': case 'setroles':
+            await executeSetRole(message, args);
+            break;
+          case 'setsummary':
+            await executeSetSummary(message, args);
             break;
           case 'startsecret': case 'secret':
             await executeStartSecret(message, args);
+            break;
+          case 'starttemplate': case 'start':
+            await executeStartTemplate(message, args);
             break;
           case 'update':
             await executeUpdateBug(message, args);
