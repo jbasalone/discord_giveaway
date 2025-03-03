@@ -188,15 +188,60 @@ export async function handleMinibossCommand(
             let restrictedUser = restrictedUsers.get(giveawayId);
             if (!restrictedUser) return;
 
-            finalWinners = finalWinners.filter(id => id !== restrictedUser);
+            const forceEnabled = Boolean(giveaway.get("forceStart")); // ✅ Ensure correct boolean handling
+            const actualHostId = giveaway.get("host"); // ✅ Ensure correct host ID is used
+
+            console.log(`📌 [DEBUG] Checking if restricted user (${restrictedUser}) is the host (${actualHostId})`);
+
+            // ❌ **If the restricted user is the host, warn them instead of rerolling**
+            if (restrictedUser === actualHostId) {
+                await minibossChannel.send({
+                    content: `⚠️ **<@${actualHostId}>, you are the host and cannot be rerolled!**\nPlease resolve your issue immediately.`,
+                });
+                return;
+            }
+
+            // ✅ **Count non-host participants AFTER removing the restricted user**
+            const updatedParticipants = finalWinners.filter(id => id !== restrictedUser);
+            const remainingCount = updatedParticipants.length;
+
+            console.log(`📌 [DEBUG] Non-host participant count after removing restricted user: ${remainingCount}`);
+
+            // ❌ **If there are fewer than 9 non-host participants, deny reroll (even with --force)**
+            if (remainingCount < 9) {
+                await minibossChannel.send({
+                    content: `❌ **Reroll is not possible!** A **Miniboss requires at least 9  participants.**\n either give time or end the miniboss.`,
+                });
+                return;
+            }
+
+            // ✅ **Proceed with rerolling only if there are 10 or more non-host participants**
+            finalWinners = updatedParticipants; // Remove restricted user
 
             await minibossChannel.send({
                 content: `🔄 **New Winners:** ${finalWinners.map(id => `<@${id}>`).join(", ")}`,
             });
 
-            await updateChannelAccess([restrictedUser], false);
+            // ✅ **Ensure we only update permissions for non-host participants**
+            if (restrictedUser !== actualHostId) {
+                try {
+                    const member = await minibossChannel.guild.members.fetch(restrictedUser).catch(() => null);
+                    if (member) {
+                        await minibossChannel.permissionOverwrites.edit(member, {
+                            ViewChannel: false,
+                            SendMessages: false
+                        });
+                        console.log(`🔑 [DEBUG] Removed channel access for ${restrictedUser}`);
+                    } else {
+                        console.warn(`⚠️ [DEBUG] Member ${restrictedUser} not found in guild. Skipping permission update.`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Error updating channel permissions for ${restrictedUser}:`, error);
+                }
+            }
+
             restrictedUsers.delete(giveawayId);
-            await sendCommandButtons();
+            await sendCommandButtons(); // Re-send command buttons
         }
 
         if (interaction.customId === `give-1m-${giveawayId}`) {
