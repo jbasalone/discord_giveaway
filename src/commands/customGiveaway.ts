@@ -151,7 +151,8 @@ export async function execute(message: Message, rawArgs: string[]) {
         } else if (arg === "--field" && rawArgs.length > 0) {
             let fieldData = sanitizeArg(rawArgs.shift());
 
-            if (rawArgs[0] && !rawArgs[0].startsWith("--")) {
+            // ✅ **Handle Multi-word Fields Properly**
+            while (rawArgs[0] && !rawArgs[0].startsWith("--")) {
                 fieldData += " " + sanitizeArg(rawArgs.shift());
             }
 
@@ -159,7 +160,13 @@ export async function execute(message: Message, rawArgs: string[]) {
                 let [key, ...valueParts] = fieldData.split(":");
                 key = sanitizeArg(key);
                 let value = sanitizeArg(valueParts.join(":"));
-                extraFields[key] = value;
+
+                // ✅ **Append New Fields Instead of Overwriting**
+                if (!extraFields[key]) {
+                    extraFields[key] = value;
+                } else {
+                    extraFields[key] += `\n${value}`; // Append values on a new line if the same key appears multiple times
+                }
             }
         } else if (arg === "--extraentries") {
             useExtraEntries = true;
