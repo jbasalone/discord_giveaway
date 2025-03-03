@@ -146,9 +146,15 @@ export async function execute(message: Message, rawArgs: string[]) {
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
     const channel = message.channel as TextChannel;
 
+    let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
     let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
     let resolvedRoleId = roleId && roleMappings[roleId] ? roleMappings[roleId] : null;
     let rolePing = resolvedRoleId ? `<@&${resolvedRoleId}>` : "";
+
+    if (!resolvedRoleId){
+        rolePing = defaultRole ? `<@&${defaultRole}>` : "";
+    }
+
 
     // ✅ **Create Embed**
     const embed = new EmbedBuilder()
@@ -166,7 +172,6 @@ export async function execute(message: Message, rawArgs: string[]) {
         embed.addFields([{ name: "✨ Extra Entries Enabled", value: "✅ Yes", inline: true }]);
     }
 
-    // ✅ **Send Giveaway Message**
     let giveawayMessage = await channel.send({ content: rolePing, embeds: [embed] });
 
     // ✅ **Create "Join" and "Leave" Buttons**

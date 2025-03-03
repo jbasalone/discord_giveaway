@@ -175,6 +175,11 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
     const channel = message.channel as TextChannel;
+    let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
+
+    if (!roleId){
+        roleId = defaultRole
+    }
 
     let rolePing = roleId ? `<@&${roleId}>` : "";
 
