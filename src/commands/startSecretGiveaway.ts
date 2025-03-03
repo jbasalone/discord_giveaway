@@ -28,7 +28,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         return message.reply("❌ Secret giveaways are not enabled on this server.");
     }
 
-    
+
 
     // ✅ **Extract & Validate Arguments**
     const maxWinners = parseInt(rawArgs[0]) || 5;

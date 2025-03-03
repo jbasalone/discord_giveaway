@@ -47,7 +47,7 @@ export async function handleMinibossCommand(
         return;
     }
 
-    const guildSettings = await GuildSettings.findOne({ where: { guildId: guild.id } });
+    const guildSettings = await GuildSettings.findOne({where: {guildId: guild.id}});
     const minibossChannelId = guildSettings?.get("minibossChannelId") as string;
 
     if (!minibossChannelId) {
@@ -88,6 +88,7 @@ export async function handleMinibossCommand(
     }
 
     let commandText = "";
+
     async function sendCommandButtons() {
         const botId = "555955826880413696";
         const winnerMentions = finalWinners.map(id => `<@${id}>`).join(" ");
@@ -157,7 +158,7 @@ export async function handleMinibossCommand(
 
         const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("💰 Give 1 Minute").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("⏲️ Give 1 Minute").setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
         );
 
@@ -167,7 +168,7 @@ export async function handleMinibossCommand(
         });
     });
 
-    const buttonCollector = minibossChannel.createMessageComponentCollector({ time: 300000 });
+    const buttonCollector = minibossChannel.createMessageComponentCollector({time: 300000});
 
     buttonCollector.on("collect", async (interaction: Interaction) => {
         if (!interaction.isButton()) return;
@@ -198,8 +199,31 @@ export async function handleMinibossCommand(
             await sendCommandButtons();
         }
 
+        if (interaction.customId === `give-1m-${giveawayId}`) {
+            let restrictedUser = restrictedUsers.get(giveawayId);
+            if (!restrictedUser) return;
+
+            await minibossChannel.send({
+                content: `⏳ <@${hostId}>, **${restrictedUser}** has **1 more minute** to proceed...`,
+            });
+
+            // ✅ Start 1-minute timeout
+            setTimeout(async () => {
+                const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("⏲️ Give 1 Minute").setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
+                );
+
+                await minibossChannel.send({
+                    content: `⏳ **Time's up!** <@${hostId}>, choose an action for **${restrictedUser}**:`,
+                    components: [actionRow],
+                });
+            }, 60000); // 60 seconds delay
+        }
+
         if (interaction.customId === `end-ga-${giveawayId}`) {
-            await minibossChannel.send({ content: `❌ **Miniboss Giveaway has been canceled by the host.**` });
+            await minibossChannel.send({content: `❌ **Miniboss Giveaway has been canceled by the host.**`});
             await updateChannelAccess(finalWinners, false);
             buttonCollector.stop();
             restrictionCollector.stop();

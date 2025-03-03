@@ -41,17 +41,22 @@ export async function execute(message: Message, rawArgs: string[]) {
         allowedRoles = [];
     }
 
-    if (allowedRoles.length > 0 && !message.member?.roles.cache.some(role => allowedRoles.includes(role.id))) {
-        return message.reply("❌ You do not have permission to start giveaways.");
+    if (allowedRoles.length > 0 && message.member) {
+        const isScheduled = message.author.id === client.user?.id; // Bot started it
+
+        if (!isScheduled && !message.member.roles.cache.some(role => allowedRoles.includes(role.id))) {
+            console.log("[ERROR] [CUSTOMGIVEAWAY.ts] ❌ You do not have permission to start giveaways.", [allowedRoles]);
+            return message.reply("❌ You do not have permission to start giveaways.");
+        }
     }
 
     const allowedChannel = await AllowedGiveawayChannels.findOne({ where: { guildId, channelId: message.channel.id } });
 
     if (!allowedChannel) {
-        return message.reply("❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
+        return message.reply("[ERROR] [CUSTOMGIVEAWAY.ts] ❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
     }
 
-    console.log("🔍 [DEBUG] Raw Args:", rawArgs);
+    console.log("🔍 [DEBUG][CUSTOMGIVEAWAY.ts] Raw Args:", rawArgs);
 
     // ✅ **Check if the first argument is a valid template ID**
     let templateId: number | null = null;
@@ -65,7 +70,11 @@ export async function execute(message: Message, rawArgs: string[]) {
     let useExtraEntries = false;
 
     // **Sanitize all incoming arguments**
-    rawArgs = rawArgs.map(sanitizeArg);
+    const argMatches = rawArgs.join(" ").match(/"([^"]+)"|(\S+)/g);
+    const parsedArgs = argMatches ? argMatches.map(arg => arg.replace(/^"|"$/g, '').trim()) : [];
+
+    console.log("🔍 [DEBUG] [customGiveaway.ts] Parsed Args:", parsedArgs);
+
 
     if (!isNaN(parseInt(rawArgs[0], 10))) {
         templateId = parseInt(rawArgs.shift()!, 10);
@@ -74,8 +83,9 @@ export async function execute(message: Message, rawArgs: string[]) {
         let savedGiveaway: SavedGiveaway | null = await SavedGiveaway.findOne({ where: { id: templateId } });
 
         if (!savedGiveaway) {
-            return message.reply(`❌ No saved giveaway found with ID: ${templateId}`);
+            return message.reply(` ❌ No saved giveaway found with ID: ${templateId}`);
         }
+
 
         title = savedGiveaway.get("title") || "Giveaway";
         durationStr = savedGiveaway.get("duration").toString();
@@ -83,9 +93,12 @@ export async function execute(message: Message, rawArgs: string[]) {
         extraFields = JSON.parse(savedGiveaway.get("extraFields") || "{}");
         roleId = savedGiveaway.get("role") ?? null;
     } else {
-        title = sanitizeArg(rawArgs.shift());
-        durationStr = sanitizeArg(rawArgs.shift());
-        winnerCountStr = sanitizeArg(rawArgs.shift());
+        if (parsedArgs.length < 3) {
+            return message.reply("❌ Invalid usage! Example: `!ga custom \"Super Giveaway\" 30s 1 --field \"Requirement: Level 50+\" --role VIP --extraentries`.");
+        }
+        title = parsedArgs.shift()!;
+        durationStr = parsedArgs.shift()!;
+        winnerCountStr = parsedArgs.shift()!;
     }
 
     if (!title || !durationStr || !winnerCountStr) {
@@ -93,11 +106,28 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     // ✅ Convert & Validate Duration
-    let durationMs = convertToMilliseconds(durationStr);
-    if (isNaN(durationMs) || durationMs <= 0) {
-        console.warn(`⚠️ [DEBUG] Invalid duration (${durationMs}) detected! Defaulting to 60s.`);
+    let durationMs = 0;
+
+// ✅ Handle cases where durationStr is already in milliseconds
+    if (!isNaN(Number(durationStr)) && Number(durationStr) > 1000) {
+        durationMs = Number(durationStr);
+    }
+// ✅ Handle relative time formats (e.g., 30s, 10m, 2h, 1d)
+    else if (/^\d+s$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 1000;
+    } else if (/^\d+m$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 60 * 1000;
+    } else if (/^\d+h$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 60 * 60 * 1000;
+    } else if (/^\d+d$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 24 * 60 * 60 * 1000;
+    } else {
+        console.warn(`⚠️ [DEBUG] [customGiveawy.ts] Invalid duration format detected (${durationStr}). Defaulting to 60s.`);
         durationMs = 60000;
     }
+
+    console.log(`📌 [DEBUG] [customGiveawy.ts] Parsed Duration (ms): ${durationMs}`);
+
 
     // ✅ Convert & Validate Winner Count
     let winnerCount = parseInt(winnerCountStr, 10);
@@ -120,6 +150,11 @@ export async function execute(message: Message, rawArgs: string[]) {
             hostId = mentionMatch ? mentionMatch[1] : sanitizeArg(rawArgs.shift());
         } else if (arg === "--field" && rawArgs.length > 0) {
             let fieldData = sanitizeArg(rawArgs.shift());
+
+            if (rawArgs[0] && !rawArgs[0].startsWith("--")) {
+                fieldData += " " + sanitizeArg(rawArgs.shift());
+            }
+
             if (fieldData.includes(":")) {
                 let [key, ...valueParts] = fieldData.split(":");
                 key = sanitizeArg(key);
@@ -161,8 +196,8 @@ export async function execute(message: Message, rawArgs: string[]) {
         embed.addFields([{ name: "✨ Extra Entries Enabled", value: "✅ Yes", inline: true }]);
     }
 
-    // ✅ **Send Giveaway Message**
     let giveawayMessage = await channel.send({ content: rolePing, embeds: [embed] });
+
 
     // ✅ **Create "Join" and "Leave" Buttons**
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -177,6 +212,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     );
 
     await giveawayMessage.edit({ components: [row] });
+
 
     // ✅ **Create Giveaway Entry in Database**
     let giveawayData = await Giveaway.create({
@@ -196,7 +232,19 @@ export async function execute(message: Message, rawArgs: string[]) {
         useExtraEntries
     });
 
+    if (!giveawayMessage.id) {
+        console.error(`[ERROR] [customGiveaway.ts] ❌ Failed to send giveaway message. Skipping.`);
+        return;
+    }
+
+    await Giveaway.update(
+        { messageId: giveawayMessage.id },
+        { where: { id: giveawayData.id } }
+    );
+
     startLiveCountdown(giveawayData.id, message.client);
 
     return message.reply(`🎉 **${title}** started! Hosted by ${hostMention}.`);
 }
+
+export { execute as startCustomGiveaway };

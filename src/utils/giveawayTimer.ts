@@ -4,10 +4,9 @@ import { handleGiveawayEnd } from '../events/giveawayEnd';
 
 export async function startLiveCountdown(giveawayId: number, client: Client) {
     try {
-
         let giveaway = await Giveaway.findByPk(giveawayId);
         if (!giveaway) {
-            console.warn(`⚠️ Giveaway not found for ID ${giveawayId}. Skipping countdown.`);
+            console.warn(`[ERROR] [giveawayTimer.ts] ⚠️ Giveaway not found for ID ${giveawayId}. Skipping countdown.`);
             return;
         }
 
@@ -29,7 +28,13 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
         try {
             updatedMessage = await channel.messages.fetch(messageId);
         } catch (error) {
-            console.error(`❌ Could not fetch giveaway message ${messageId}. Skipping update.`);
+            console.error(`[ERROR] [giveawayTimer.ts] ❌ Could not fetch giveaway message ${messageId}. Skipping update.`);
+            return;
+        }
+
+        // ✅ Ensure updatedMessage is not null before proceeding
+        if (!updatedMessage) {
+            console.warn(`[ERROR] [giveawayTimer.ts] ⚠️ updatedMessage is null for Giveaway ${giveawayId}. Skipping update.`);
             return;
         }
 
@@ -37,7 +42,7 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
         const endsAt = giveaway.get('endsAt');
         const timeLeft = endsAt - currentTime;
 
-        let embed = EmbedBuilder.from(updatedMessage.embeds[0]);
+        let embed = EmbedBuilder.from(updatedMessage.embeds[0] || new EmbedBuilder().setTitle("Giveaway").setColor("Blue"));
 
         // ✅ Fetch latest participant count from the database
         let participants: string[] = JSON.parse(giveaway.get('participants') || '[]');
@@ -51,28 +56,16 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
         const participantsIndex = embed.data.fields?.findIndex(f => f.name.includes('🎟️ Total Participants')) ?? -1;
 
         if (timeLeft <= 0) {
-            console.log(`✅ Giveaway ${giveawayId} has ended, calling handleGiveawayEnd()`);
+            console.log(`✅ Giveaway ${giveawayId} has ended, checking if it's already being processed...`);
 
-            // ✅ Set status to "🛑 Ended!"
-            if (timeRemainingIndex !== -1) {
-                embed.spliceFields(timeRemainingIndex, 1, {
-                    name: '⏳ Status',
-                    value: '🛑 Ended!',
-                    inline: true
-                });
-            } else {
-                embed.addFields({
-                    name: '⏳ Status',
-                    value: '🛑 Ended!',
-                    inline: true
-                });
+            const existingGiveaway = await Giveaway.findOne({ where: { id: giveawayId } });
+            if (!existingGiveaway) {
+                console.warn(`⚠️ Giveaway ${giveawayId} is already processed and removed.`);
+                return;
             }
 
-            await updatedMessage.edit({ embeds: [embed] });
-
-            // ✅ Call handleGiveawayEnd to finalize giveaway
+            console.log(`✅ Processing giveaway ${giveawayId} for ending.`);
             await handleGiveawayEnd(client, giveawayId);
-
             return;
         }
 
@@ -106,7 +99,12 @@ export async function startLiveCountdown(giveawayId: number, client: Client) {
             });
         }
 
-        await updatedMessage.edit({ embeds: [embed] });
+        // ✅ Check again if updatedMessage is valid before editing
+        if (updatedMessage) {
+            await updatedMessage.edit({ embeds: [embed] });
+        } else {
+            console.warn(`[ERROR] [giveawayTimer.ts] ❌ updatedMessage is unexpectedly null when trying to update.`);
+        }
 
         // ✅ Schedule next update only if giveaway is still running
         const nextUpdateInMs = Math.min(5000, timeLeft * 1000);

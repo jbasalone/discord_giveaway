@@ -32,7 +32,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     // ✅ Create an Embed for Saved Templates
     const embed = new EmbedBuilder()
-        .setTitle(filterByUser ? "📜 Your Saved Giveaway Templates" : "📜 All Saved Giveaway Templates")
+        .setTitle(filterByUser ? "📜 Your Saved Giveaway Templates" : "📜 All Saved Giveaway Templates --mine to list yours")
         .setColor(Colors.Blue);
 
     // ✅ Loop through templates and retrieve values safely using `.get()`

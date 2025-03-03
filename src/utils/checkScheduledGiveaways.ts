@@ -3,12 +3,57 @@ import { ScheduledGiveaway } from "../models/ScheduledGiveaway";
 import { startTemplateGiveaway } from "../commands/startTemplate";
 import { startCustomGiveaway } from "../commands/customGiveaway";
 import { SavedGiveaway } from "../models/SavedGiveaway";
-import { Giveaway } from "../models/Giveaway";
 import { GuildSettings } from "../models/GuildSettings";
 import { Op } from "sequelize";
+import moment from "moment-timezone";
 
+/**
+ * Parses different time formats from `--time`
+ */
+function parseScheduleTime(timeStr: string): Date | null {
+    if (!timeStr) return null;
+
+    if (timeStr.match(/^\d{2}:\d{2}$/)) {
+        // Format: HH:mm (Today at specified time)
+        const now = moment().startOf("day");
+        return now.set("hour", parseInt(timeStr.split(":")[0])).set("minute", parseInt(timeStr.split(":")[1])).toDate();
+    }
+
+    if (timeStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
+        // Format: YYYY-MM-DD HH:mm
+        return moment(timeStr, "YYYY-MM-DD HH:mm").toDate();
+    }
+
+    if (timeStr.match(/^\d+$/)) {
+        // Unix Timestamp
+        return new Date(parseInt(timeStr) * 1000);
+    }
+
+    if (timeStr.match(/^(\d+)([smhd])$/)) {
+        // Relative Time (e.g., 1h, 30m, 45s)
+        const amount = parseInt(timeStr.match(/^(\d+)/)?.[1] ?? "0");
+        const unit = timeStr.match(/[smhd]/)?.[0];
+
+        switch (unit) {
+            case "s":
+                return moment().add(amount, "seconds").toDate();
+            case "m":
+                return moment().add(amount, "minutes").toDate();
+            case "h":
+                return moment().add(amount, "hours").toDate();
+            case "d":
+                return moment().add(amount, "days").toDate();
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Checks and executes scheduled giveaways.
+ */
 export async function checkScheduledGiveaways(client: Client) {
-    console.log("🔍 [DEBUG] setScheduledGiveaway] Running checkScheduledGiveaways...");
+    console.log("🔍 [DEBUG] Running checkScheduledGiveaways...");
 
     const now = new Date();
     const giveaways = await ScheduledGiveaway.findAll({
@@ -17,23 +62,21 @@ export async function checkScheduledGiveaways(client: Client) {
     });
 
     if (giveaways.length === 0) {
-        console.log("[setScheduledGiveaway] ✅ [DEBUG] No scheduled giveaways ready to start.");
+        console.log("[checkScheduledGiveaway] ✅ No scheduled giveaways ready to start.");
         return;
     }
 
     console.log(`🔍 [DEBUG] Found ${giveaways.length} scheduled giveaways.`);
 
     for (const giveaway of giveaways) {
-        console.log(`📌 [DEBUG][setScheduledGiveaway] Giveaway Before Processing: ${JSON.stringify(giveaway, null, 2)}`);
+        console.log(`📌 [DEBUG] Processing giveaway ID ${giveaway.id}: ${giveaway.title}`);
 
-        const { id, guildId, channelId, title, type, templateId, args, repeatInterval, scheduleTime } = giveaway;
+        const { id, guildId, channelId, title, type, templateId, args, repeatInterval, scheduleTime, repeatTime } = giveaway;
 
         if (!id || !guildId || !channelId || !title || !scheduleTime) {
-            console.error(`[ERROR] [setScheduledGiveaway]❌ Skipping invalid giveaway due to missing required fields:`, giveaway);
+            console.error(`[ERROR] Skipping invalid giveaway due to missing required fields:`, giveaway);
             continue;
         }
-
-        console.log(`🔍 [DEBUG][setScheduledGiveaway] Processing giveaway ID ${id}: ${title}`);
 
         let guild = client.guilds.cache.get(guildId);
         if (!guild) {
@@ -41,51 +84,45 @@ export async function checkScheduledGiveaways(client: Client) {
                 guild = await client.guilds.fetch(guildId);
                 if (!guild) throw new Error(`Unknown Guild`);
             } catch (error) {
-                console.error(`[ERROR][setScheduledGiveaway] ❌ Could not fetch guild ID ${guildId}. Skipping giveaway ID ${id}.`, error);
+                console.error(`[ERROR] Could not fetch guild ID ${guildId}. Skipping giveaway ID ${id}.`, error);
                 continue;
             }
         }
 
         const channel = await guild.channels.fetch(channelId).catch(() => null);
         if (!channel || !(channel instanceof TextChannel)) {
-            console.error(`[ERROR][setScheduledGiveaway] ❌ Invalid or missing TextChannel for scheduled giveaway in ${guild.name} (ID: ${channelId}).`);
+            console.error(`[ERROR] Invalid or missing TextChannel for scheduled giveaway in ${guild.name} (ID: ${channelId}).`);
             continue;
         }
 
         console.log(`✅ [DEBUG] Starting giveaway in channel: ${channel.name}`);
 
-        // ✅ Fetch Guild Settings
         const guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
         if (!guildSettings) {
-            console.error(`[setScheduledGiveaway] ❌ No guild settings found for guild ID ${guildId}. Skipping.`);
+            console.error(`[ERROR] No guild settings found for guild ID ${guildId}. Skipping.`);
             continue;
         }
 
         let allowedRoles: string[] = [];
         try {
-            console.log(`🔍 [DEBUG] [setScheduledGiveaway]  Raw allowedRoles from DB:`, guildSettings.get("allowedRoles"));
             const rawAllowedRoles = guildSettings.get("allowedRoles");
             allowedRoles = rawAllowedRoles ? JSON.parse(rawAllowedRoles) : [];
-
             if (!Array.isArray(allowedRoles)) {
                 throw new Error("allowedRoles is not an array.");
             }
         } catch (error) {
-            console.error(`[ERROR] [setScheduledGiveaway] ❌ Error parsing allowedRoles for guild ID ${guildId}:`, error);
+            console.error(`[ERROR] Error parsing allowedRoles for guild ID ${guildId}:`, error);
             continue;
         }
 
-        console.log(`🔍 [DEBUG] [setScheduledGiveaway] Allowed Roles in Guild (Parsed):`, allowedRoles);
-
-        // ✅ Fetch the correct host from the template
         let savedTemplate: SavedGiveaway | null = null;
         let host = giveaway.host;
 
         if (type === "template" && templateId) {
             savedTemplate = await SavedGiveaway.findByPk(Number(templateId));
             if (!savedTemplate) {
-                console.error(`[setScheduledGiveaway] ❌ No saved giveaway template found with ID **${templateId}**.`);
+                console.error(`[ERROR] No saved giveaway template found with ID **${templateId}**.`);
                 continue;
             }
             host = savedTemplate.host || giveaway.host;
@@ -93,38 +130,21 @@ export async function checkScheduledGiveaways(client: Client) {
 
         console.log(`🔍 [DEBUG] Using host ID: ${host}`);
 
-        // ✅ Fetch the correct host user
         const hostMember = await guild.members.fetch(host).catch(() => null);
         if (!hostMember) {
-            console.error(`[ERROR] [setScheduledGiveaway] ❌ Could not fetch host user ID ${host}. Skipping giveaway ID ${id}.`);
+            console.error(`[ERROR] Could not fetch host user ID ${host}. Skipping giveaway ID ${id}.`);
             continue;
         }
-
-        // ✅ **Check if the host has at least one of the required roles**
-        const hostRoles: string[] = hostMember.roles.cache.map((role) => role.id);
-        console.log(`🔍 [DEBUG] [setScheduledGiveaway] Host ${host} Roles:`, hostRoles);
-
-        const hasRequiredRole = hostRoles.some((roleId: string) => allowedRoles.includes(roleId));
-
-        if (!hasRequiredRole) {
-            console.error(`[ERROR] [setScheduledGiveaway] ❌ Host user ID ${host} does not have a required role to start giveaways. Skipping.`);
-            continue;
-        }
-
-        console.log(`✅ Host user ID ${host} PASSES role check.`);
 
         let parsedArgs: string[] = [];
         try {
             parsedArgs = args ? JSON.parse(args) : [];
             if (!Array.isArray(parsedArgs)) throw new Error("Parsed args is not an array.");
         } catch (error) {
-            console.error(`[ERROR] [setScheduledGiveaway]❌ Error parsing args for giveaway ID ${id}:`, error);
+            console.error(`[ERROR] Error parsing args for giveaway ID ${id}:`, error);
             continue;
         }
 
-        console.log(`📌 [DEBUG] [setScheduledGiveaway] Parsed Args:`, parsedArgs);
-
-        // ✅ **Fix for Permissions Issue**
         const fakeMessage = {
             guild,
             channel,
@@ -145,58 +165,28 @@ export async function checkScheduledGiveaways(client: Client) {
 
         if (giveawayExecuted) {
             console.log(`[setScheduledGiveaway] ✅ Giveaway Executed Successfully: ${title}`);
-
-            const giveawayDuration = savedTemplate?.duration || giveaway.duration || 60000;
-            const endsAtUnix = Math.floor((Date.now() + giveawayDuration) / 1000);
-
-            await Giveaway.create({
-                guildId,
-                channelId,
-                title,
-                type: savedTemplate?.type || "custom",
-                templateId,
-                duration: giveawayDuration,
-                winnerCount: savedTemplate?.winnerCount || giveaway.winnerCount || 1,
-                extraFields: savedTemplate?.extraFields || giveaway.extraFields || "{}",
-                host,
-                messageId: "UNKNOWN",
-                description: savedTemplate?.description || `Giveaway for ${title}`,
-                endsAt: endsAtUnix,
-                startedAt: Math.floor(Date.now() / 1000),
-            });
-
-            console.log(`[setScheduledGiveaway] ✅ Giveaway Added to Database`);
         }
 
-        // ✅ **Fix Rescheduling Issue**
         const scheduledGiveaway = await ScheduledGiveaway.findByPk(id);
         if (!scheduledGiveaway) {
-            console.error(`[ERROR] [setScheduledGiveaway]  ❌ Could not fetch scheduled giveaway ID ${id} from database.`);
+            console.error(`[ERROR] Could not fetch scheduled giveaway ID ${id} from database.`);
             continue;
         }
 
-        let nextScheduleTime: Date;
-        if (typeof scheduleTime === "string") {
-            nextScheduleTime = new Date(scheduleTime);
-        } else {
-            nextScheduleTime = scheduleTime;
-        }
+        let nextScheduleTime = parseScheduleTime(repeatTime ?? "none") ?? new Date(scheduleTime);
 
-        const currentTime = new Date();
-
-        let intervalMs = 0;
         switch (repeatInterval) {
             case "hourly":
-                intervalMs = 3600000; // 1 hour
+                nextScheduleTime.setHours(nextScheduleTime.getHours() + 1);
                 break;
             case "daily":
-                intervalMs = 86400000; // 1 day
+                nextScheduleTime.setDate(nextScheduleTime.getDate() + 1);
                 break;
             case "weekly":
-                intervalMs = 604800000; // 1 week
+                nextScheduleTime.setDate(nextScheduleTime.getDate() + 7);
                 break;
             case "monthly":
-                intervalMs = 2592000000; // Approx 30 days
+                nextScheduleTime.setMonth(nextScheduleTime.getMonth() + 1);
                 break;
             case "none":
             case null:
@@ -204,24 +194,11 @@ export async function checkScheduledGiveaways(client: Client) {
                 console.log(`🗑️ Deleting scheduled giveaway ID ${id}`);
                 await scheduledGiveaway.destroy();
                 continue;
-            default:
-                console.error(`[ERROR] ❌ Unknown repeat interval: ${repeatInterval}. Skipping reschedule.`);
-                continue;
         }
 
-// ✅ Move the scheduled time FORWARD **only once** to avoid infinite loop
-        while (nextScheduleTime <= currentTime) {
-            nextScheduleTime.setTime(nextScheduleTime.getTime() + intervalMs);
-        }
+        console.log(`[DEBUG] Rescheduling giveaway ID ${id}. New scheduleTime: ${nextScheduleTime.toISOString()}`);
+        await ScheduledGiveaway.update({ scheduleTime: nextScheduleTime }, { where: { id } });
 
-// ✅ Ensure it gets **properly saved in MySQL**
-        console.log(`[DEBUG] [checkScheduledGiveaway.ts] Rescheduling giveaway ID ${id}. New scheduleTime: ${nextScheduleTime.toISOString()}`);
-        await ScheduledGiveaway.update(
-            { scheduleTime: nextScheduleTime },
-            { where: { id } }
-        );
-
-        console.log(`[setScheduledGiveaway.ts] ✅ Rescheduled giveaway ${id} for ${nextScheduleTime.toISOString()}`);console.log(`[setScheduledGiveaway.ts] ✅ Rescheduled giveaway ${id} for ${nextScheduleTime.toISOString()}`);
-
+        console.log(`[setScheduledGiveaway.ts] ✅ Rescheduled giveaway ${id} for ${nextScheduleTime.toISOString()}`);
     }
 }

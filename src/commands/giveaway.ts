@@ -21,7 +21,7 @@ function sanitizeArg(arg: string | undefined): string {
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) {
-        return message.reply("❌ This command must be used inside a server.");
+        return message.reply("  ❌ This command must be used inside a server.");
     }
 
     const guildId = message.guild.id;
@@ -91,20 +91,35 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
 // ✅ Convert & Validate Duration
-    let durationMs = convertToMilliseconds(durationStr);
-    if (isNaN(durationMs) || durationMs <= 0) {
-        console.warn(`⚠️ [DEBUG] Invalid duration (${durationMs}) detected! Defaulting to 60s.`);
+    let durationMs = 0;
+
+// ✅ Handle cases where durationStr is already in milliseconds
+    if (!isNaN(Number(durationStr)) && Number(durationStr) > 1000) {
+        durationMs = Number(durationStr);
+    }
+    else if (/^\d+s$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 1000;
+    } else if (/^\d+m$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 60 * 1000;
+    } else if (/^\d+h$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 60 * 60 * 1000;
+    } else if (/^\d+d$/.test(durationStr)) {
+        durationMs = parseInt(durationStr) * 24 * 60 * 60 * 1000;
+    } else {
+        console.warn(`⚠️ [DEBUG] [checkScheduledGivaway.ts]  Invalid duration format detected (${durationStr}). Defaulting to 60s.`);
         durationMs = 60000;
     }
+
+    console.log(`📌 [DEBUG] [checkScheduledGivaway.ts] Parsed Duration (ms): ${durationMs}`);
 
 // ✅ Convert & Validate Winner Count
     let winnerCount = parseInt(winnerCountStr, 10);
     if (isNaN(winnerCount) || winnerCount <= 0) {
-        console.warn(`⚠️ [DEBUG] Invalid winner count (${winnerCount}) detected! Defaulting to 1.`);
+        console.warn(`⚠️ [DEBUG] [checkScheduledGivaway.ts]  Invalid winner count (${winnerCount}) detected! Defaulting to 1.`);
         winnerCount = 1;
     }
 
-    console.log(`🎯 [DEBUG] Processed Values -> Title: ${title}, Duration: ${durationMs}ms, WinnerCount: ${winnerCount}`);
+    console.log(`🎯 [DEBUG]  [checkScheduledGivaway.ts]  Processed Values -> Title: ${title}, Duration: ${durationMs}ms, WinnerCount: ${winnerCount}`);
 
     while (rawArgs.length > 0) {
         const arg = sanitizeArg(rawArgs.shift());

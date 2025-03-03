@@ -11,7 +11,7 @@ export async function execute(message: Message) {
             const guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
             if (guildSettings) {
-                prefix = guildSettings.get("prefix")?.trim() || "!";
+                prefix = String(guildSettings?.get("prefix") || "!").trim();
             } else {
                 console.warn(`⚠️ [WARNING] No GuildSettings found for guild ${guildId}, using default prefix.`);
             }
@@ -34,6 +34,7 @@ export async function execute(message: Message) {
                     { label: "📢 About the Bot", value: "about" },
                     { label: "🎉 Basic Commands", value: "basic" },
                     { label: "📜 Template Commands", value: "template" },
+                    { label: "⏲ Scheduling Commands", value: "scheduling" },
                     { label: "⚙️ Admin Commands", value: "admin" },
                     { label: "👑 Miniboss Commands", value: "miniboss" },
                     { label: "🕵️ Secret Giveaway", value: "secret" },
@@ -61,7 +62,7 @@ export async function handleHelpSelection(interaction: Interaction) {
         try {
                 const guildSettings = await GuildSettings.findOne({ where: { guildId } });
                 if (guildSettings) {
-                    prefix = guildSettings.get("prefix")?.trim() || "!";
+                    prefix = String(guildSettings?.get("prefix") || "!").trim();
                 } else {
                     console.warn(`⚠️ [WARNING] No GuildSettings found for guild ${guildId}, using default prefix.`);
                 }
@@ -139,6 +140,15 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "Optional Flags: `[--force]`", value: `Allows **Miniboss giveaways** to start with fewer participants.` },
                 { name: "Optional Flags: `[--winners]`", value: `Add pre-selected winners for Miniboss giveaways.` },
             ],
+            "scheduling": [
+                { name: "🚀 Start a Scheduled Giveaway", value: `\`${prefix} ga schedule custom <title> <duration> <winnercount> -time 18:00 --repeat hourly\`` },
+                { name: "🚀 Start a Scheduled Giveaway From Templates", value: `\`${prefix} ga schedule template <templateid> -time 18:00 --repeat hourly\`` },
+                { name: "📜 List Schedules", value: `\`${prefix} ga listschedule\`` },
+                { name: "📜 Delete a Schedule", value: `\`${prefix} ga cancelschedule <id>\`` },
+                { name: "Flags: `[--time]`", value: `ex. --time 20:30, --time 2025-03-05 18:00 → (March 5, 2025, at 6:00 PM server time), --time 30s, --time 2d, --time 2m, --time 1740808623 (exact UTC format) ` },
+                { name: "Flags: `[--repeat]`", value: `ex. --repeat hourly | daily | weekly | monthly `},
+
+            ],
             "user": [
                 { name: "🔢 Set Your RPG Level & TT Level", value: `\`${prefix} ga setlevel <level> <ttLevel>\`` },
                 { name: "📊 Check Your Level Settings", value: `\`${prefix} ga mylevel\`` },
@@ -171,6 +181,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                     { label: "🎉 Basic Commands", value: "basic" },
                     { label: "📜 Template Commands", value: "template" },
                     { label: "👑 Miniboss Commands", value: "miniboss" },
+                    { label:  "⏲ Scheduling Commands", value: "scheduling"},
                     { label: "🚀 Advanced Flags & Examples", value: "flags" },
                     { label: "🕵️ Secret Giveaway", value: "secret" },
                     { label: "🛡️ User Commands", value: "user" },

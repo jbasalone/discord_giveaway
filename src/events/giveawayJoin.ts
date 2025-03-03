@@ -5,7 +5,7 @@ import { cache } from '../utils/giveawayCache';
 
 // ✅ Cooldown system (per giveaway)
 const userCooldowns = new Map<string, Map<string, number>>();
-const cooldownTime = 10 * 1000;
+const cooldownTime = 5 * 1000;
 
 export async function executeJoinLeave(interaction: ButtonInteraction) {
   try {
@@ -24,7 +24,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     if (!giveaway) {
       console.warn(`⚠️ Giveaway ${giveawayMessageId} not found in DB, checking cache...`);
-      giveaway = cache.get(giveawayMessageId);
+      giveaway = cache.get(giveawayMessageId) ?? null;
     }
 
     if (!giveaway) {
@@ -75,53 +75,45 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     await giveaway.update({ participants: JSON.stringify(participants) });
 
-    // ✅ **Update Embed**
+    // ✅ **Update Embed (Participants Count)**
     let embed = EmbedBuilder.from(interaction.message.embeds[0]);
 
-    // Ensure fields exist before accessing
     if (!embed.data.fields) {
       embed.setFields([]);
     }
 
-    // Find "Total Participants" field safely
     const totalParticipantsIndex = embed.data.fields?.findIndex(f => f.name.includes('🎟️ Total Participants')) ?? -1;
 
     if (totalParticipantsIndex !== -1) {
-      // ✅ Update existing field
       embed.spliceFields(totalParticipantsIndex, 1, { name: '🎟️ Total Participants', value: `${participants.length} users`, inline: true });
     } else {
-      // ✅ Add new field if it doesn't exist
       embed.addFields({ name: '🎟️ Total Participants', value: `${participants.length} users`, inline: true });
     }
 
-    // ✅ **Modify Buttons Dynamically (Only Affect Buttons)**
+    // ✅ **Modify Buttons WITHOUT Disabling Them**
     const updatedButtons = interaction.message.components.map(row => {
       return new ActionRowBuilder<ButtonBuilder>().addComponents(
-          row.components
-              .filter(component => component.type === 2) // ✅ Only process buttons (type 2 in Discord API)
-              .map(component =>
-                  ButtonBuilder.from(component as unknown as ButtonBuilder).setDisabled(
-                      component.customId === `join-${giveawayMessageId}` ? isJoining : !isJoining
-                  )
-              )
+          row.components.map(component => ButtonBuilder.from(component as unknown as ButtonBuilder))
       );
     });
 
+    // ✅ **Edit the original message for all users without disabling buttons**
     await interaction.message.edit({ embeds: [embed], components: updatedButtons });
 
-    // ✅ **Prevent "Interaction Failed" and send confirmation**
-    await interaction.deferUpdate().catch(() => {
-      console.error("❌ [ERROR] Failed to defer update.");
-    });
-
-    // ✅ Send ephemeral message after deferring
-    await interaction.followUp({
-      content: isJoining ? '✅ You have successfully joined the giveaway!' : '✅ You have left the giveaway.',
+    // ✅ **Send an Ephemeral Response to the User**
+    await interaction.reply({
+      content: isJoining
+          ? '✅ **You have successfully joined the giveaway!** 🎉'
+          : '❌ **You have left the giveaway.**',
       ephemeral: true
-    }).catch(() => console.error("❌ [ERROR] Failed to send follow-up message."));
+    });
 
   } catch (error) {
     console.error('❌ Error handling giveaway join/leave:', error);
-    return await interaction.reply({ content: '❌ An error occurred. Please try again later.', ephemeral: true });
+
+    // ✅ **Prevent Bot Crashes by Handling Errors Gracefully**
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: '❌ An error occurred. Please try again later.', ephemeral: true });
+    }
   }
 }

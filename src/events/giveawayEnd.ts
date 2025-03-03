@@ -25,7 +25,8 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
     if (!giveaway) {
       console.warn(`⚠️ Giveaway ${giveawayId} not found in DB. Checking cache.`);
-      giveaway = cache.get(String(giveawayId));
+      console.log(`📌 [DEBUG] [giveawayEnd.ts] Cache Lookup for Giveaway ${giveawayId}:`, cache.get(String(giveawayId)));
+      giveaway = cache.get(String(giveawayId)) ?? null;
     }
 
     if (!giveaway) {
@@ -49,7 +50,7 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
     const channel = guild.channels.cache.get(String(giveaway.get("channelId") ?? "")) as TextChannel;
     if (!channel) {
-      console.error(`❌ Giveaway channel not found for guild ${guildId}`);
+      console.error(`[ERROR] [giveawayEnd.ts] ❌ Giveaway channel not found for guild ${guildId}`);
       return;
     }
 
@@ -57,7 +58,7 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     try {
       giveawayMessage = await channel.messages.fetch(String(giveaway.get("messageId")));
     } catch (error) {
-      console.error(`❌ Could not fetch giveaway message: ${error}`);
+      console.error(`[ERROR] [giveawayEnd.ts] ❌ Could not fetch giveaway message: ${error}`);
       return;
     }
 
@@ -79,11 +80,22 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
       if (isForced || participants.length >= 9) {
         console.log(`🚀 **Proceeding with Miniboss Giveaway** (Forced: ${isForced}, Participants: ${participants.length})`);
-
+        console.log(`🔄 [DEBUG] handleGiveawayEnd() Triggered for Giveaway ID: ${giveawayId}`);
         // ✅ **Pass Guaranteed Winners to Miniboss Command**
+        if (cache.has(`miniboss-running-${giveawayId}`)) {
+          console.warn(`⚠️ Miniboss giveaway ${giveawayId} is already running. Skipping duplicate execution.`);
+          return;
+        }
+        cache.set(`miniboss-running-${giveawayId}`, true, 600); // Prevents duplicates for 10 minutes
         await handleMinibossCommand(client, giveawayId, [...new Set([...guaranteedWinners, ...participants])]);
+
+
       } else {
-        console.warn(`❌ Miniboss Giveaway cannot proceed due to insufficient participants.`);
+        await channel.send({
+          content: `❌ Miniboss Giveaway cannot proceed due to insufficient participants. [Giveaway Link](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,
+        });
+        console.warn(`[DEBUG] [giveawayEnd.ts] ❌ Miniboss Giveaway cannot proceed due to insufficient participants.`);
+
         return;
       }
     }
@@ -141,9 +153,10 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     // ✅ **Modify only the winners & participant fields**
     const updatedEmbed = EmbedBuilder.from(existingEmbed)
         .setFields(
-            ...existingEmbed.fields.filter(field => !["🎟️ Total Participants", "🏆 Winners"].includes(field.name)), // Preserve other fields
+            ...existingEmbed.fields.filter(field => !["🎟️ Total Participants", "🏆 Winners", "⏳ Ends In"].includes(field.name)), // Preserve other fields
             { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
-            { name: "🏆 Winners", value: winners, inline: true }
+            { name: "🏆 Winners", value: winners, inline: true },
+            { name: "⏳ Ends In", value: ":warning: Ended!", inline: true}
         );
 
     // ✅ **Disable buttons instead of removing them**
@@ -153,6 +166,7 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     );
 
     await giveawayMessage.edit({ embeds: [updatedEmbed], components: [disabledButtons] });
+
 
     await channel.send({
       content: `🎉 **Giveaway Ended!** 🎉\n🏆 **Winners:** ${winners}\n🔗 [Giveaway Link](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,

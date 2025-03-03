@@ -56,8 +56,21 @@ export async function execute(message: Message, rawArgs: string[]) {
     for (let i = 2; i < args.length; i++) {
         if (args[i] === "--time" && args[i + 1]) {
             const timeString = args[i + 1];
-            if (!/^\d{1,2}:\d{2}$/.test(timeString)) return message.reply("[ERROR] [scheduledGiveaway.ts] ❌ Invalid time format! Use `HH:MM`.");
-            scheduleTime = moment(timeString, "HH:mm").toDate();
+
+            if (/^\d{1,2}:\d{2}$/.test(timeString)) {
+                // ✅ HH:MM format
+                scheduleTime = moment(timeString, "HH:mm").toDate();
+            } else if (/^\d+[smhd]$/.test(timeString)) {
+                // ✅ Relative time format (30s, 10m, 2h, 1d)
+                const durationMs = convertToMilliseconds(timeString);
+                if (durationMs > 0) {
+                    scheduleTime = new Date(Date.now() + durationMs);
+                } else {
+                    return message.reply("❌ Invalid relative time format! Use `30s`, `10m`, `1h`, `1d`.");
+                }
+            } else {
+                return message.reply("❌ Invalid time format! Use `HH:MM` or relative times like `30s`, `10m`, `1h`, `1d`.");
+            }
             i++;
         } else if (args[i] === "--repeat" && args[i + 1]) {
             repeatInterval = args[i + 1] as "hourly" | "daily" | "weekly" | "monthly";
