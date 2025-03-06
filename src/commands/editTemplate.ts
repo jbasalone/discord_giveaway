@@ -27,19 +27,7 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
     const numericTemplateId = parseInt(templateId as string, 10);
     console.log(`🔍 [DEBUG] Generating embed for template: ${numericTemplateId}`);
 
-    // 🔥 Step 1: Check If ID Exists in Raw SQL Query
-    const checkQuery = await sequelize.query(`SELECT id FROM saved_giveaways WHERE id = :id`, {
-        replacements: { id: numericTemplateId },
-        type: QueryTypes.SELECT
-    });
-    console.log(`📋 [DEBUG] Raw SQL Query Result:`, checkQuery);
-
-    // 🔥 Step 2: Check All Available IDs in Database
-    const allIds = await SavedGiveaway.findAll({ attributes: ["id"], raw: true });
-    console.log(`📋 [DEBUG] Full List of IDs in Database:`, allIds.map(row => row.id));
-
-    // 🔥 Step 3: Retrieve the Template
-    let savedTemplate = await SavedGiveaway.findOne({
+    const savedTemplate = await SavedGiveaway.findOne({
         where: { id: numericTemplateId },
         raw: true
     });
@@ -51,7 +39,6 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
 
     console.log(`📋 [DEBUG] Found Template Data:`, savedTemplate);
 
-    // 🔥 Step 4: Merge Pending Edits
     let templateEdits = pendingEdits.get(String(numericTemplateId)) || {};
     console.log(`📋 [DEBUG] Pending Edits:`, templateEdits);
 
@@ -59,15 +46,18 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
 
     try {
         let savedExtraFields = JSON.parse(savedTemplate.extraFields || "{}");
-        let newExtraFields = templateEdits["extraFields"] ? JSON.parse(String(templateEdits["extraFields"])) : {};
-        mergedTemplate.extraFields = JSON.stringify({ ...savedExtraFields, ...newExtraFields });
+        let editedExtraFields = templateEdits["extraFields"] ? JSON.parse(String(templateEdits["extraFields"])) : {};
+
+        // ✅ Ensure merged template gets updated extra fields
+        mergedTemplate.extraFields = JSON.stringify({ ...savedExtraFields, ...editedExtraFields });
+
     } catch (error) {
         console.error("❌ [ERROR] Failed to merge extraFields JSON:", error);
     }
 
     console.log(`🔍 [DEBUG] Final Merged Template:`, mergedTemplate);
 
-    // 🔥 Step 5: Organize Fields for Discord Embed
+    // ✅ Refresh the fields in the embed to prevent old values from appearing
     const fields: { name: string; value: string }[] = [];
     const extraFieldsArray: { name: string; value: string }[] = [];
     const fieldsToExclude = new Set(["id", "guildId", "type", "creator"]);
@@ -94,9 +84,12 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
     // ✅ Add Extra Fields Separately
     try {
         const extraFields = JSON.parse(mergedTemplate.extraFields || "{}");
+
+        // 🔥 Only add **updated** extra fields
         Object.entries(extraFields).forEach(([key, value]) => {
             addField(key, value, true);
         });
+
     } catch (error) {
         console.error("❌ [ERROR] Failed to parse extraFields JSON:", error);
     }
@@ -149,7 +142,7 @@ async function updateEditMessage(channel: TextChannel, templateId: number | stri
 
         new ButtonBuilder()
             .setCustomId(`exit-${numericTemplateId}`)
-            .setLabel("🚪 Exit Without Saving")
+            .setLabel("🚪 Exit Editor")
             .setStyle(ButtonStyle.Danger)
     );
 
@@ -404,7 +397,6 @@ export async function handleModal(interaction: ModalSubmitInteraction) {
             console.error("❌ [ERROR] Failed to parse extraFields JSON:", error);
         }
 
-        // Check if this is an extra field edit or a new extra field
         if (fieldId === "newExtraField") {
             // 🆕 User is adding a new extra field
             const extraFieldKey = interaction.fields.getTextInputValue("extra_field_key").trim();
@@ -422,20 +414,20 @@ export async function handleModal(interaction: ModalSubmitInteraction) {
             const newValue = interaction.fields.getTextInputValue("extra_field_value").trim();
 
             const oldKey = fieldId;
-            const oldValue = existingExtraFields[oldKey];
 
             if (!newKey) {
                 return interaction.reply({ content: "❌ Field name cannot be empty.", ephemeral: true });
             }
 
-            // If the key changed, we need to remove the old one and add the new
+            // If the key was changed, remove the old key and store under the new key
             if (newKey !== oldKey) {
                 delete existingExtraFields[oldKey];
+                console.log(`🔄 [DEBUG] Renamed Extra Field: ${oldKey} → ${newKey}`);
             }
 
             existingExtraFields[newKey] = newValue;
 
-            console.log(`📋 [DEBUG] Updated Extra Field: ${oldKey} → ${newKey} = ${newValue}`);
+            console.log(`📋 [DEBUG] Updated Extra Field: ${newKey} = ${newValue}`);
         }
 
         // ✅ Store the update in `pendingEdits`
@@ -446,7 +438,7 @@ export async function handleModal(interaction: ModalSubmitInteraction) {
 
         console.log(`📋 [DEBUG] Updated Pending Edits:`, pendingEdits);
 
-        // ✅ Update the UI
+        // ✅ Update the embed with the correct extra fields
         if (interaction.channel instanceof TextChannel) {
             await updateEditMessage(interaction.channel, templateId);
         }

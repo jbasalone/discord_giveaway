@@ -14,6 +14,7 @@ export class SavedGiveaway extends Model {
     public forceStart!: boolean;
     public role!: string;
     public host!: string;
+    public creator!: string;
 }
 
 SavedGiveaway.init(
