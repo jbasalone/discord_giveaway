@@ -24,8 +24,8 @@ const templateMessageMap = new Map<string, string>();
 
 /** Generate Embed for Editing */
 async function generateEditEmbed(templateId: number | string): Promise<APIEmbed | null> {
-    const numericTemplateId = parseInt(templateId as string, 10); // ✅ Ensure numeric type
-    console.log(`🔍 [DEBUG] Generating embed for template: ${numericTemplateId} (Type: ${typeof numericTemplateId})`);
+    const numericTemplateId = parseInt(templateId as string, 10);
+    console.log(`🔍 [DEBUG] Generating embed for template: ${numericTemplateId}`);
 
     // 🔥 Step 1: Check If ID Exists in Raw SQL Query
     const checkQuery = await sequelize.query(`SELECT id FROM saved_giveaways WHERE id = :id`, {
@@ -38,10 +38,10 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
     const allIds = await SavedGiveaway.findAll({ attributes: ["id"], raw: true });
     console.log(`📋 [DEBUG] Full List of IDs in Database:`, allIds.map(row => row.id));
 
-    // 🔥 Step 3: Run `findOne()` and Check Result
+    // 🔥 Step 3: Retrieve the Template
     let savedTemplate = await SavedGiveaway.findOne({
-        where: { id: numericTemplateId },  // ✅ Ensure correct numeric comparison
-        raw: true // ✅ Force raw data for direct retrieval
+        where: { id: numericTemplateId },
+        raw: true
     });
 
     if (!savedTemplate) {
@@ -49,12 +49,12 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
         return null;
     }
 
-    console.log(`📋 [DEBUG] Found Template Data:`, savedTemplate); // ✅ Confirm data retrieval
+    console.log(`📋 [DEBUG] Found Template Data:`, savedTemplate);
 
-    let templateEdits = pendingEdits.get(String(numericTemplateId)) || {}; // 🔥 Ensure key consistency
-    console.log(`📋 [DEBUG] Pending Edits (To Merge):`, templateEdits);
+    // 🔥 Step 4: Merge Pending Edits
+    let templateEdits = pendingEdits.get(String(numericTemplateId)) || {};
+    console.log(`📋 [DEBUG] Pending Edits:`, templateEdits);
 
-    // ✅ Apply pending edits correctly (Fix applied here)
     const mergedTemplate = { ...savedTemplate, ...templateEdits };
 
     try {
@@ -67,27 +67,35 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
 
     console.log(`🔍 [DEBUG] Final Merged Template:`, mergedTemplate);
 
+    // 🔥 Step 5: Organize Fields for Discord Embed
     const fields: { name: string; value: string }[] = [];
+    const extraFieldsArray: { name: string; value: string }[] = [];
     const fieldsToExclude = new Set(["id", "guildId", "type", "creator"]);
-    const seenFields = new Set<string>();
 
-    function addField(name: string, value: any) {
-        if (!seenFields.has(name) && !fieldsToExclude.has(name)) {
-            fields.push({ name, value: String(value) });
-            seenFields.add(name);
+    function addField(name: string, value: unknown, isExtraField = false) {
+        const valueStr = typeof value === "string" ? value : JSON.stringify(value);
+        if (isExtraField) {
+            extraFieldsArray.push({ name, value: valueStr });
+        } else if (!fieldsToExclude.has(name)) {
+            fields.push({ name, value: valueStr });
         }
     }
 
-    // ✅ Add main fields
+    // ✅ Convert duration from `ms` to `s`
+    if (mergedTemplate.duration) {
+        mergedTemplate.duration = Math.floor(mergedTemplate.duration / 1000); // Convert to seconds
+    }
+
+    // ✅ Add Standard Fields
     Object.entries(mergedTemplate).forEach(([key, value]) => {
-        if (key !== "extraFields") addField(key, String(value));
+        if (key !== "extraFields") addField(key, value);
     });
 
-    // ✅ Add extra fields separately
+    // ✅ Add Extra Fields Separately
     try {
         const extraFields = JSON.parse(mergedTemplate.extraFields || "{}");
         Object.entries(extraFields).forEach(([key, value]) => {
-            addField(key, value);
+            addField(key, value, true);
         });
     } catch (error) {
         console.error("❌ [ERROR] Failed to parse extraFields JSON:", error);
@@ -97,7 +105,11 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
         title: `📝 Editing Template: ${mergedTemplate.title}`,
         description: `📌 Select a section to edit below:`,
         color: 0x3498db,
-        fields: fields.length > 0 ? fields : [{ name: "No fields available", value: "No data found." }]
+        fields: [
+            ...fields,
+            ...extraFieldsArray,
+            { name: "➕ Add New Extra Field", value: "Click to add" }
+        ]
     };
 }
 
@@ -113,13 +125,11 @@ async function updateEditMessage(channel: TextChannel, templateId: number | stri
         return;
     }
 
-    const selectMenuOptions = embed.fields
-        ? embed.fields.map(field => ({
-            label: field.name.substring(0, 25),
-            value: encodeURIComponent(field.name),
-            description: String(field.value).substring(0, 50),
-        }))
-        : [];
+    const selectMenuOptions = embed.fields?.map(field => ({
+        label: field.name.substring(0, 25),
+        value: encodeURIComponent(field.name),
+        description: String(field.value).substring(0, 50),
+    })) || []; // ✅ Prevents crashes if `embed.fields` is undefined
 
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(`edit-template-${numericTemplateId}`)
@@ -139,13 +149,13 @@ async function updateEditMessage(channel: TextChannel, templateId: number | stri
 
         new ButtonBuilder()
             .setCustomId(`exit-${numericTemplateId}`)
-            .setLabel("🚪 Exit ")
+            .setLabel("🚪 Exit Without Saving")
             .setStyle(ButtonStyle.Danger)
     );
 
     try {
         let message;
-        if (templateMessageMap.has(String(numericTemplateId))) { // 🔥 Ensure key consistency
+        if (templateMessageMap.has(String(numericTemplateId))) {
             const messageId = templateMessageMap.get(String(numericTemplateId));
             message = await channel.messages.fetch(messageId!).catch(() => null);
         }
@@ -161,7 +171,7 @@ async function updateEditMessage(channel: TextChannel, templateId: number | stri
                 embeds: [embed],
                 components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu), buttons],
             });
-            templateMessageMap.set(String(numericTemplateId), sentMessage.id); // ✅ Ensure ID is stored as string
+            templateMessageMap.set(String(numericTemplateId), sentMessage.id);
         }
     } catch (error) {
         console.error(`❌ [ERROR] Failed to update edit message:`, error);
@@ -306,15 +316,67 @@ export async function handleSelectMenu(interaction: StringSelectMenuInteraction)
 
     console.log(`🔍 [DEBUG] Selected Field for Editing: ${fieldId}`);
 
+    const savedTemplate = await SavedGiveaway.findOne({ where: { id: templateId } });
+
+    if (!savedTemplate) {
+        return interaction.reply({ content: "❌ Template not found.", ephemeral: true });
+    }
+
+    let existingExtraFields: Record<string, any> = {};
+
+    try {
+        existingExtraFields = JSON.parse(savedTemplate.get("extraFields") || "{}");
+    } catch (error) {
+        console.error("❌ [ERROR] Failed to parse extraFields JSON:", error);
+    }
+
+    if (fieldId === "➕ Add New Extra Field") {
+        // Prompt user for both key & value
+        const modal = new ModalBuilder()
+            .setCustomId(`edit-template-modal-${templateId}-newExtraField`)
+            .setTitle("Add Extra Field")
+            .addComponents(
+                new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId("extra_field_key")
+                        .setLabel("Field Name")
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                ),
+                new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId("extra_field_value")
+                        .setLabel("Field Value")
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                )
+            );
+
+        await interaction.showModal(modal);
+        return;
+    }
+
+    // Pre-fill the existing key and value when editing an extra field
+    const existingValue = existingExtraFields[fieldId] || "";
+
     const modal = new ModalBuilder()
         .setCustomId(`edit-template-modal-${templateId}-${encodeURIComponent(fieldId)}`)
-        .setTitle(`Edit: ${fieldId}`)
+        .setTitle(`Edit Extra Field: ${fieldId}`)
         .addComponents(
             new ActionRowBuilder<TextInputBuilder>().addComponents(
                 new TextInputBuilder()
-                    .setCustomId("new_value")
-                    .setLabel(`New Value for ${fieldId}`)
+                    .setCustomId("extra_field_key")
+                    .setLabel("Field Name")
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(fieldId)
+                    .setRequired(true)
+            ),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+                new TextInputBuilder()
+                    .setCustomId("extra_field_value")
+                    .setLabel("Field Value")
                     .setStyle(TextInputStyle.Paragraph)
+                    .setValue(existingValue)
                     .setRequired(true)
             )
         );
@@ -326,22 +388,14 @@ export async function handleSelectMenu(interaction: StringSelectMenuInteraction)
 export async function handleModal(interaction: ModalSubmitInteraction) {
     try {
         const [templateId, fieldId] = interaction.customId.replace("edit-template-modal-", "").split("-").map(decodeURIComponent);
-        const newValue = interaction.fields.getTextInputValue("new_value").trim();
+        console.log(`🔄 [DEBUG] Handling modal submission for Template ID: ${templateId}, Field: ${fieldId}`);
 
-        console.log(`🔄 [DEBUG] Updating Field: ${fieldId}, New Value: ${newValue}`);
-
-        if (!pendingEdits.has(templateId)) {
-            pendingEdits.set(templateId, {});
-        }
-
-        // Fetch existing template to modify `extraFields`
         const savedTemplate = await SavedGiveaway.findOne({ where: { id: templateId } });
 
         if (!savedTemplate) {
             return interaction.reply({ content: "❌ Template not found.", ephemeral: true });
         }
 
-        // ✅ Fix: Explicitly define extraFields as a flexible object
         let existingExtraFields: Record<string, any> = {};
 
         try {
@@ -350,10 +404,44 @@ export async function handleModal(interaction: ModalSubmitInteraction) {
             console.error("❌ [ERROR] Failed to parse extraFields JSON:", error);
         }
 
-// ✅ Now TypeScript allows indexing safely
-        existingExtraFields[fieldId] = newValue;
+        // Check if this is an extra field edit or a new extra field
+        if (fieldId === "newExtraField") {
+            // 🆕 User is adding a new extra field
+            const extraFieldKey = interaction.fields.getTextInputValue("extra_field_key").trim();
+            const extraFieldValue = interaction.fields.getTextInputValue("extra_field_value").trim();
+
+            if (!extraFieldKey) {
+                return interaction.reply({ content: "❌ Field name cannot be empty.", ephemeral: true });
+            }
+
+            existingExtraFields[extraFieldKey] = extraFieldValue;
+            console.log(`📋 [DEBUG] Added New Extra Field: ${extraFieldKey} = ${extraFieldValue}`);
+        } else {
+            // ✏️ User is editing an existing extra field
+            const newKey = interaction.fields.getTextInputValue("extra_field_key").trim();
+            const newValue = interaction.fields.getTextInputValue("extra_field_value").trim();
+
+            const oldKey = fieldId;
+            const oldValue = existingExtraFields[oldKey];
+
+            if (!newKey) {
+                return interaction.reply({ content: "❌ Field name cannot be empty.", ephemeral: true });
+            }
+
+            // If the key changed, we need to remove the old one and add the new
+            if (newKey !== oldKey) {
+                delete existingExtraFields[oldKey];
+            }
+
+            existingExtraFields[newKey] = newValue;
+
+            console.log(`📋 [DEBUG] Updated Extra Field: ${oldKey} → ${newKey} = ${newValue}`);
+        }
 
         // ✅ Store the update in `pendingEdits`
+        if (!pendingEdits.has(templateId)) {
+            pendingEdits.set(templateId, {});
+        }
         pendingEdits.get(templateId)!.extraFields = JSON.stringify(existingExtraFields);
 
         console.log(`📋 [DEBUG] Updated Pending Edits:`, pendingEdits);
