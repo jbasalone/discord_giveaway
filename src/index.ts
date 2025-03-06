@@ -12,6 +12,7 @@ import { getGuildPrefix } from './utils/getGuildPrefix';
 import { Giveaway } from './models/Giveaway';
 import { Op } from 'sequelize';
 import { handleSecretGiveawayButton } from "./events/handleSecretGiveawayButton";
+import { handleSelectMenu, handleModal, handleButton } from "./commands/editTemplate";
 
 // ✅ Giveaway Scheduling Commands
 import { execute as executeScheduleGiveaway } from './commands/scheduleGiveaway';
@@ -20,9 +21,7 @@ import { execute as executeCancelSchedule } from './commands/cancelSchedule';
 import { checkScheduledGiveaways } from './utils/checkScheduledGiveaways';
 
 
-// ✅ Existing Commands
 import { execute as executeSetLevel } from './commands/setLevel';
-import { execute as executeEditTemplate } from './commands/editTemplate';
 import { execute as executeStartTemplate } from './commands/startTemplate';
 import { execute as executeSetRole } from './commands/setRole';
 import { execute as executeSaveTemplate } from './commands/saveTemplate';
@@ -49,6 +48,8 @@ import { execute as executeStartSecret } from './commands/startSecretGiveaway';
 import { execute as executeSetSummary } from './commands/setSummary';
 import { execute as executeBugCreate } from './commands/bugs';
 import { execute as executeUpdateBug } from './commands/updateBug';
+import { execute as executeEditTemplate } from './commands/editTemplate'
+
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
 
@@ -88,9 +89,6 @@ async function startBot() {
       setInterval(async () => {
         await checkScheduledGiveaways(client);
       }, 30 * 1000);
-      setInterval(async () => {
-        await checkScheduledGiveaways(client);
-      }, 5 * 60 * 1000);
     });
 
 
@@ -216,15 +214,24 @@ async function startBot() {
       }
     });
 
+
+
     client.on(Events.InteractionCreate, async (interaction) => {
-      if (!interaction.isButton() && !interaction.isStringSelectMenu()) return;
+      if (!interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isModalSubmit()) return;
 
       try {
-        if (interaction.isStringSelectMenu() && interaction.customId === "help-menu") {
-          await handleHelpSelection(interaction);
+        if (interaction.isStringSelectMenu()) {
+          if (interaction.customId === "help-menu") {
+            await handleHelpSelection(interaction);
+          } else if (interaction.customId.startsWith("edit-template-")) {
+            await handleSelectMenu(interaction);
+          }
+        } else if (interaction.isModalSubmit() && interaction.customId.startsWith("edit-template-modal-")) {
+          await handleModal(interaction);
         } else if (interaction.isButton()) {
-
-          if (interaction.customId.startsWith("miniboss-")) {
+          if (interaction.customId.startsWith("preview-") || interaction.customId.startsWith("save-") || interaction.customId.startsWith("exit-")) {
+            await handleButton(interaction); // ✅ Handle Save & Exit or Preview buttons
+          } else if (interaction.customId.startsWith("miniboss-")) {
             const giveawayId = interaction.customId.split("-").pop();
             if (!giveawayId) {
               return interaction.reply({ content: "❌ Invalid Miniboss Giveaway ID.", ephemeral: true });
@@ -236,12 +243,10 @@ async function startBot() {
             }
 
             const participants = JSON.parse(giveaway.get("participants") ?? "[]");
-
             console.log(`🔍 Calling handleMinibossCommand (Participants: ${participants.length})`);
             await handleMinibossCommand(client, parseInt(giveawayId), participants);
-
           } else if (interaction.customId.startsWith("secret-")) {
-            await handleSecretGiveawayButton(interaction); // ✅ Handle secret giveaway button interactions
+            await handleSecretGiveawayButton(interaction);
           } else {
             await executeJoinLeave(interaction);
           }
@@ -251,6 +256,7 @@ async function startBot() {
         await interaction.reply({ content: "❌ An error occurred.", flags: MessageFlags.SuppressEmbeds });
       }
     });
+
 
     await client.login(process.env.DISCORD_TOKEN);
   } catch (error) {
