@@ -97,6 +97,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "🔄 Reroll Winners", value: `\`${prefix} ga reroll <messageID>\`` },
                 { name: "❌ Delete an Active Giveaway", value: `\`${prefix} ga delete <messageID>\`` },
                 { name: "🔍 Check Giveaway Status", value: `\`${prefix} ga check <messageID> | all\`` },
+                { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listga\`` },
             ],
             "template": [
                 { name: "💾 Save a Giveaway Template", value: `\`${prefix} ga save --type <custom|miniboss> <name> <duration> [winners]\`` },
@@ -122,6 +123,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "👑 Restrict GA Creation to Specific Roles", value: `\`${prefix} ga setrole --allowed add/remove <roleid>\`` },
                 { name: "👑 Role Pings and Role Mapping", value: `\`${prefix} ga setrole --role add/remove rolename: <roleid>\`` },
                 { name: "👑 Set Miniboss Host Role", value: `\`${prefix} ga setrole --miniboss add/remove @role\`` },
+                { name: "⚙️ List Configured Miniboss Host Roles", value: `\`${prefix} ga listmbroles\``},
                 { name: "👑 Set Miniboss Channel", value: `\`${prefix} ga mbch #channel\`` },
             ],
             "secret": [
@@ -152,7 +154,7 @@ export async function handleHelpSelection(interaction: Interaction) {
             "user": [
                 { name: "🔢 Set Your RPG Level & TT Level", value: `\`${prefix} ga setlevel <level> <ttLevel>\`` },
                 { name: "📊 Check Your Level Settings", value: `\`${prefix} ga mylevel\`` },
-                { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listgiveaways\`` },
+                { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listga\`` },
             ],
             "flags": [
                 { name: "Optional Flags: `[--host]`", value: `Sets a host for the giveaway, defaults to you.` },
