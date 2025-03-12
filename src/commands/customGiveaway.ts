@@ -143,8 +143,12 @@ export async function execute(message: Message, rawArgs: string[]) {
     while (rawArgs.length > 0) {
         const arg = sanitizeArg(rawArgs.shift());
 
-        if (arg === "--role" && rawArgs.length > 0) {
-            roleId = sanitizeArg(rawArgs.shift());
+        if (arg === "--role" && parsedArgs.length > 0) {
+            const inputRole = sanitizeArg(parsedArgs.shift());
+
+            let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
+
+            roleId = roleMappings[inputRole] ? roleMappings[inputRole] : inputRole;
         } else if (arg === "--host" && rawArgs.length > 0) {
             const mentionMatch = rawArgs[0]?.match(/^<@!?(\d+)>$/);
             hostId = mentionMatch ? mentionMatch[1] : sanitizeArg(rawArgs.shift());
@@ -181,7 +185,9 @@ export async function execute(message: Message, rawArgs: string[]) {
         roleId = defaultRole
     }
 
-    let rolePing = roleId ? `<@&${roleId}>` : "";
+    let resolvedRoleId = roleId && roleId !== "--field" ? roleId : defaultRole;
+    let rolePing = resolvedRoleId ? `<@&${resolvedRoleId}>` : "";
+    console.log("📌 [DEBUG] Resolved Role Ping:", rolePing);
 
     let hostUser: User | null = null;
     try {
