@@ -166,7 +166,7 @@ This project is licensed under the MIT License.
 ---
 
 ## ❓ **Support**
-1. If you encounter issues, feel free to [open an issue](https://github.com/jbasalone/giveaway_system/issues) or contact the bot admins.
+1. If you encounter issues, feel free to [open an issue](https://github.com/jbasalone/discord_giveaway/issues) or contact the bot admins.
 2. Giveaway System was created by discord user @jennyb feel free to DM me if you have questions. 
 
 
