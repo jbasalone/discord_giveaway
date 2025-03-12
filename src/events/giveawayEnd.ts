@@ -58,8 +58,10 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     try {
       giveawayMessage = await channel.messages.fetch(String(giveaway.get("messageId")));
     } catch (error) {
-      console.error(`[ERROR] [giveawayEnd.ts] ❌ Could not fetch giveaway message: ${error}`);
-      return;
+      console.error(`[ERROR] Giveaway message not found: ${error}`);
+    }
+    if (!giveawayMessage) {
+      return channel.send("❌ Giveaway message has been deleted or is inaccessible.");
     }
 
     let participants: string[] = JSON.parse(giveaway.get("participants") ?? "[]");
