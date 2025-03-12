@@ -40,7 +40,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         }
 
         title = savedTemplate.get("name") as string;
-        templateId = savedTemplate.get("id") as number;
+        templateId = Number(savedTemplate.get("id"));
         duration = savedTemplate.get("duration") as number;
         winnerCount = savedTemplate.get("winnerCount") as number;
         extraFields = savedTemplate.get("extraFields") ? JSON.parse(savedTemplate.get("extraFields") as string) : {};
