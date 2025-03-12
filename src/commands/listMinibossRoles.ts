@@ -1,37 +1,43 @@
-import { Message, EmbedBuilder, PermissionsBitField, Colors } from 'discord.js';
+import { Message, EmbedBuilder } from 'discord.js';
 import { MinibossRoles } from '../models/MinibossRoles';
 
-export async function execute(message: Message, guildId?: string) {
-    if (!message.guild) {
-        return message.reply("❌ This command must be used inside a server.");
-    }
-
-    if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply("❌ You need **Administrator** permissions to view allowed Miniboss roles.");
-    }
-
-    guildId = guildId || message.guild.id;
-
+export async function execute (message: Message, guildId: string) {
     try {
-        // ✅ Fetch Allowed Roles for Miniboss Giveaways
-        const allowedRoles = await MinibossRoles.findAll({ where: { guildId } });
+        if (!guildId) {
+            return message.reply("❌ This command can only be used in a server.");
+        }
 
-        const allowedRolesText = allowedRoles.length > 0
-            ? allowedRoles.map(entry => `<@&${entry.roleId}>`).join("\n")
-            : "❌ No roles are currently allowed to start Miniboss giveaways.";
+        console.log("🔍 [DEBUG] Fetching Miniboss allowed roles...");
 
-        // ✅ Create Embed
+
+        // Fetch roles from the database
+        const roles = await MinibossRoles.findAll({ where: { guildId } });
+
+        if (!roles || roles.length === 0) {
+            return message.reply("❌ No Miniboss allowed roles found for this server.");
+        }
+
+        const roleMentions = roles.length > 0
+            ? roles
+                .map(entry => {
+                    const roleId = entry.get("roleId") ?? null;
+                    return roleId ? `<@&${roleId}>` : "❌ Unknown Role";
+                })
+                .join(", ")
+            : "❌ No roles assigned to start Miniboss giveaways.";
+
+
+        // ✅ Embed with role mentions
         const embed = new EmbedBuilder()
-            .setTitle(`👑 Miniboss Giveaway Allowed Roles`)
-            .setDescription(`These roles are permitted to start **Miniboss Giveaways** in **${message.guild.name}**.`)
-            .setColor(Colors.Gold)
-            .addFields({ name: "🛡 Allowed Roles", value: allowedRolesText, inline: false })
-            .setFooter({ text: "Only server admins can modify these settings." });
+            .setTitle("Miniboss Allowed Roles")
+            .setDescription(roleMentions)
+            .setColor(0x3498db);
 
         await message.reply({ embeds: [embed] });
 
+        console.log("✅ [DEBUG] Successfully sent Miniboss roles.");
     } catch (error) {
         console.error("❌ Error fetching Miniboss allowed roles:", error);
-        return message.reply("❌ **Failed to retrieve Miniboss roles.** Please try again.");
+        return message.reply("❌ An error occurred while fetching Miniboss roles.");
     }
 }
