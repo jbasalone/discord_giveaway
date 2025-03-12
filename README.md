@@ -63,7 +63,7 @@ This is a **Discord Giveaway System** that allows server administrators to creat
 | `!ga starttemplate <template_id>` | Starts a giveaway using a saved template. |
 
 ### **🦇 Miniboss Giveaways (Epic RPG Integration)**
-Miniboss giveaways are designed for **Epic RPG** game events, allowing participants to **win in-game rewards** and compete for exclusive prizes. These giveaways:
+Miniboss giveaways are designed for **Epic RPG** boss defeat to drop in game coin. These giveaways:
 - **Encourage Epic RPG server participation** 📢
 - **Automatically track event entries** 🏆
 - **Can be limited to specific roles** (e.g., `@RPG Master`)
