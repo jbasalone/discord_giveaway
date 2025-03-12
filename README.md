@@ -72,9 +72,6 @@ Miniboss giveaways are designed for **Epic RPG** boss defeat to drop in game coi
 | Command | Description |
 |---------|------------|
 | `!ga miniboss "Dragon Raid" 3h 1` | Creates a miniboss giveaway for Epic RPG players. |
-| `!ga listminiboss` | Lists active miniboss giveaways. |
-| `!ga joinminiboss <giveaway_id>` | Manually joins a miniboss giveaway. |
-
 
 ### **📊 Giveaway Management**
 | Command | Description |
