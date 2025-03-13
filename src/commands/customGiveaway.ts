@@ -138,23 +138,16 @@ export async function execute(message: Message, rawArgs: string[]) {
             const mentionMatch = rawArgs[0]?.match(/^<@!?(\d+)>$/);
             hostId = mentionMatch ? mentionMatch[1] : sanitizeArg(rawArgs.shift());
         } else if (arg === "--field" && rawArgs.length > 0) {
-            let fieldData = rawArgs.shift() || "";
+            let fieldDataParts: string[] = [];
 
-            // ✅ Ensure fieldData is defined
-            if (!fieldData) {
-                return message.reply("❌ Missing value for `--field`. Example: `--field \"Requirement: Level 50+\"`.");
+            // ✅ Collect all parts of the field (including spaces)
+            while (rawArgs.length > 0) {
+                let part = rawArgs.shift()!;
+                fieldDataParts.push(part);
+                if (part.endsWith('"')) break; // Stop at the closing quote
             }
 
-            // ✅ Handle quoted multi-word fields correctly
-            if (fieldData.startsWith('"')) {
-                while (rawArgs.length > 0 && !rawArgs[0].endsWith('"')) {
-                    fieldData += " " + rawArgs.shift();
-                }
-                if (rawArgs[0]?.endsWith('"')) {
-                    fieldData += " " + rawArgs.shift();
-                }
-                fieldData = fieldData.replace(/^"|"$/g, '').trim();
-            }
+            let fieldData = fieldDataParts.join(" ").replace(/^"|"$/g, '').trim();
 
             // ✅ Ensure fieldData contains a `:`
             if (!fieldData.includes(":")) {
@@ -167,6 +160,7 @@ export async function execute(message: Message, rawArgs: string[]) {
             useExtraEntries = true;
         }
     }
+    console.log(`✅ [DEBUG] Parsed Extra Fields:`, extraFields);
 
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
     const channel = message.channel as TextChannel;
@@ -174,18 +168,39 @@ export async function execute(message: Message, rawArgs: string[]) {
     console.log(`✅ [DEBUG] Final Parsed Values -> Title: "${title}", Duration: "${durationMs}ms", Winner Count: "${winnerCount}"`);
 
 
-    if (!roleId){
-        roleId = defaultRole
+    let rolePings: string[] = [];
+    let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
+
+// ✅ Resolve role name from roleMappings
+    if (roleId && roleMappings.hasOwnProperty(roleId)) {
+        roleId = roleMappings[roleId];
     }
 
-    if (roleId) {
-        let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
-        roleId = roleMappings[roleId] || roleId; // Resolve role ID from mappings
+// ✅ Allow multiple role IDs if comma-separated
+    let roleList = roleId ? roleId.split(",") : [];
+    for (let id of roleList) {
+        if (message.guild.roles.cache.has(id)) {
+            rolePings.push(`<@&${id}>`);
+        } else {
+            return message.reply(`❌ The role ID **${id}** is invalid or does not exist.`);
+        }
     }
 
-    let resolvedRoleId = roleId && roleId !== "--field" ? roleId : defaultRole;
-    let rolePing = resolvedRoleId ? `<@&${resolvedRoleId}>` : "";
-    console.log(`✅ [DEBUG] Role ID: "${roleId}", Role Mention: "${rolePing}"`);
+// ✅ If no role is specified, fallback to the default giveaway role
+    if (rolePings.length === 0 && defaultRole && message.guild.roles.cache.has(defaultRole)) {
+        rolePings.push(`<@&${defaultRole}>`);
+    }
+
+// ✅ If no valid roles exist, prevent the giveaway
+    if (rolePings.length === 0) {
+        return message.reply("❌ No valid roles were provided. Use the role name (ex: `--role tt25`) or a valid role ID.");
+    }
+
+// ✅ Final role ping string
+    let rolePing = rolePings.join(" ");
+    console.log(`✅ [DEBUG] Resolved Role Pings: ${rolePing}`);
+    console.log(`✅ [DEBUG] RoleMappings:`, roleMappings);
+    console.log(`✅ [DEBUG] Role ID before mapping: ${roleId}`);
 
     let hostUser: User | null = null;
     try {

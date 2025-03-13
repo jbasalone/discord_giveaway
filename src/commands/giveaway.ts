@@ -28,7 +28,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
     if (!guildSettings) {
-        return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
+        return message.reply("❌ Guild settings not found. Admins need to configure GA System first.");
     }
 
     let allowedRoles: string[] = [];
@@ -87,7 +87,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
 // ✅ Ensure required values are provided
     if (!durationStr || !winnerCountStr) {
-        return message.reply("❌ Invalid format! Example: `!ga create \"Super Giveaway\" 30s 1` or `!ga create 30s 1`.");
+        return message.reply("❌ Invalid format! Example: `ga create \"Super Giveaway\" 30s 1` or `!ga create 30s 1`.");
     }
 
 // ✅ Convert & Validate Duration
@@ -125,9 +125,25 @@ export async function execute(message: Message, rawArgs: string[]) {
         const arg = sanitizeArg(rawArgs.shift());
 
         if (arg === "--role" && rawArgs.length > 0) {
-            roleId = sanitizeArg(rawArgs.shift());
+            let nextArg = sanitizeArg(rawArgs.shift());
+            let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
 
-        } else if (arg === "--host" && rawArgs.length > 0) {
+            // ✅ If the role is found in mappings, replace it with the actual role ID
+            if (roleMappings[nextArg]) {
+                roleId = roleMappings[nextArg];
+            }
+            // ✅ Otherwise, assume it's a direct role ID (allow if valid)
+            else if (/^\d+$/.test(nextArg)) {
+                // ✅ Ensure the role exists in the guild before allowing it
+                let roleExists = message.guild.roles.cache.has(nextArg);
+                if (roleExists) {
+                    roleId = nextArg;
+                } else {
+                    return message.reply(`❌ The role ID **${nextArg}** is invalid or does not exist.`);
+                }
+            }
+        }
+        if (arg === "--host" && rawArgs.length > 0) {
             const mentionMatch = rawArgs[0]?.match(/^<@!?(\d+)>$/);
             hostId = mentionMatch ? mentionMatch[1] : sanitizeArg(rawArgs.shift());
         } else if (arg === "--field" && rawArgs.length > 0) {
@@ -149,11 +165,23 @@ export async function execute(message: Message, rawArgs: string[]) {
     let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
     let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
     let resolvedRoleId = roleId && roleMappings[roleId] ? roleMappings[roleId] : null;
-    let rolePing = resolvedRoleId ? `<@&${resolvedRoleId}>` : "";
+    let rolePings: string[] = [];
+    let roleList = roleId ? roleId.split(",") : [];
 
-    if (!resolvedRoleId){
-        rolePing = defaultRole ? `<@&${defaultRole}>` : "";
+    for (let id of roleList) {
+        if (/^\d+$/.test(id) && message.guild.roles.cache.has(id)) { // ✅ Ensure role is valid before adding it
+            rolePings.push(`<@&${id}>`);
+        } else {
+            return message.reply(`❌ The role ID **${id}** is invalid or does not exist.`);
+        }
     }
+
+    if (rolePings.length === 0) {
+        return message.reply("❌ No valid roles were provided. use the role name 'ex: --role tt25 or roleID'\n roll names can be found in 'ga config'.");
+    }
+
+// ✅ Join all role pings into one string
+    let rolePing = rolePings.join(" ");
 
 
     // ✅ **Create Embed**
@@ -171,7 +199,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (useExtraEntries) {
         embed.addFields([{ name: "✨ Extra Entries Enabled", value: "✅ Yes", inline: true }]);
     }
-
+    console.log(`✅ [DEBUG] Resolved Role Pings: ${rolePing}`);
     let giveawayMessage = await channel.send({ content: rolePing, embeds: [embed] });
 
     // ✅ **Create "Join" and "Leave" Buttons**
@@ -207,6 +235,6 @@ export async function execute(message: Message, rawArgs: string[]) {
         forceStart: false,
         useExtraEntries
     });
-    startLiveCountdown(giveawayData.id, message.client);
+    startLiveCountdown(Number(giveawayMessage.id), message.client);
 
 }
