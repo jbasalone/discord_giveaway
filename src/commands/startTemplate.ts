@@ -45,7 +45,6 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
         console.log(`🚀 [DEBUG] Starting ${type} Giveaway from Template ID: ${templateId}`);
 
         let argsToPass: string[] = [
-            String(templateId),
             String(title),
             String(durationMs),
             String(parsedWinnerCount)

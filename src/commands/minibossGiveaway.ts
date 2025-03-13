@@ -208,6 +208,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     const createdGiveaway = await Giveaway.create({
         guildId: message.guild.id,
         host: hostId,
+        userId: hostId,
         channelId: channel.id,
         messageId: giveawayMessage.id,
         title,
@@ -219,6 +220,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         winnerCount,
         extraFields: JSON.stringify(extraFields),
         guaranteedWinners: JSON.stringify(guaranteedWinners),
+        status: "approved",
         forceStart: forceStart ? 1 : 0
     });
 

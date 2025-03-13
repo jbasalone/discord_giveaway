@@ -17,7 +17,10 @@ export class Giveaway extends Model {
     public winnerCount!: number;
     public extraFields!: string | null;
     public forceStart!: boolean;
-    public useExtraEntries!: boolean;  // ✅ Add this field
+    public useExtraEntries!: boolean;
+    public status!: "pending" | "approved" | "rejected";
+    public userId!: string;
+    public roleRestriction!: string | null;
 }
 
 Giveaway.init(
@@ -92,8 +95,21 @@ Giveaway.init(
             type: DataTypes.BOOLEAN,
             allowNull: false,
             defaultValue: false
+        },
+        roleRestriction: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+         status: {
+            type: DataTypes.ENUM("pending", "approved", "rejected"),
+             allowNull: false,
+            defaultValue: "pending"
+        },
+        userId: {
+            type: DataTypes.STRING,
+            allowNull: false
         }
-    },
+        },
     {
         sequelize,
         modelName: 'Giveaway',

@@ -189,23 +189,24 @@ export async function execute(message: Message, rawArgs: string[]) {
     await giveawayMessage.edit({ components: [row] });
 
     // ✅ **Create Giveaway Entry in Database**
-    let giveawayData = await Giveaway.create({
+    const giveawayData = await Giveaway.create({
         guildId,
         host: hostId,
+        userId: message.author.id,
         channelId: channel.id,
         messageId: giveawayMessage.id,
         title,
-        description: `**Host:** <@${hostId}>\n**Server:** ${message.guild?.name}`,
+        description: `**Host:** <@${hostId}> | **Server:** ${message.guild?.name}`,
         type: "custom",
         duration: durationMs,
         endsAt,
         participants: JSON.stringify([]),
         winnerCount,
+        status:"approved",
         extraFields: JSON.stringify(extraFields),
         forceStart: false,
         useExtraEntries
     });
-
     startLiveCountdown(giveawayData.id, message.client);
 
 }
