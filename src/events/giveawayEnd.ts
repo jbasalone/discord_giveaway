@@ -25,7 +25,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
     if (!giveaway) {
       console.warn(`⚠️ Giveaway ${giveawayId} not found in DB. Checking cache.`);
-      console.log(`📌 [DEBUG] [giveawayEnd.ts] Cache Lookup for Giveaway ${giveawayId}:`, cache.get(String(giveawayId)));
       giveaway = cache.get(String(giveawayId)) ?? null;
     }
 
@@ -39,8 +38,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       console.error(`❌ Missing guildId for giveaway ${giveawayId}`);
       return;
     }
-
-    console.log(`✅ Giveaway ${giveawayId} is in Guild ${guildId}`);
 
     const guild = client.guilds.cache.get(String(guildId));
     if (!guild) {
@@ -60,8 +57,26 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     } catch (error) {
       console.error(`[ERROR] Giveaway message not found: ${error}`);
     }
+
     if (!giveawayMessage) {
-      return channel.send("❌ Giveaway message has been deleted or is inaccessible.");
+      const hostId = giveaway.get("hostId") as string | null;
+      if (hostId) {
+        try {
+          const hostUser = await client.users.fetch(hostId);
+          await hostUser.send(
+              `⚠️ Your giveaway (ID: ${giveawayId}) in **${guild.name}** has been deleted or is inaccessible. Please recreate it if necessary.`
+          );
+          console.log(`📩 Sent DM to host (${hostId}) about missing giveaway ${giveawayId}.`);
+        } catch (dmError) {
+          console.error(`❌ Failed to DM host (${hostId}) about missing giveaway:`, dmError);
+        }
+      } else {
+        console.warn(`⚠️ Host ID is missing for giveaway ${giveawayId}. Cannot send DM.`);
+      }
+
+      await Giveaway.destroy({ where: { id: giveawayId } });
+      console.log(`✅ Giveaway ${giveawayId} removed from the database.`);
+      return;
     }
 
     let participants: string[] = JSON.parse(giveaway.get("participants") ?? "[]");
@@ -75,29 +90,19 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
 
     // ✅ **Retrieve Guaranteed Winners**
     let guaranteedWinners: string[] = JSON.parse(giveaway.get("guaranteedWinners") ?? "[]");
-    console.log(`🔒 Guaranteed Winners for Giveaway ${giveawayId}:`, guaranteedWinners);
 
     if (giveaway.get("type") === "miniboss") {
-      console.log(`🔍 Miniboss Giveaway Detected! Checking participant count... (Participants: ${participants.length}, isForced: ${isForced})`);
-
       if (isForced || participants.length >= 9) {
-        console.log(`🚀 **Proceeding with Miniboss Giveaway** (Forced: ${isForced}, Participants: ${participants.length})`);
-        console.log(`🔄 [DEBUG] handleGiveawayEnd() Triggered for Giveaway ID: ${giveawayId}`);
-        // ✅ **Pass Guaranteed Winners to Miniboss Command**
         if (cache.has(`miniboss-running-${giveawayId}`)) {
           console.warn(`⚠️ Miniboss giveaway ${giveawayId} is already running. Skipping duplicate execution.`);
           return;
         }
-        cache.set(`miniboss-running-${giveawayId}`, true, 600); // Prevents duplicates for 10 minutes
+        cache.set(`miniboss-running-${giveawayId}`, true, 600);
         await handleMinibossCommand(client, giveawayId, [...new Set([...guaranteedWinners, ...participants])]);
-
-
       } else {
         await channel.send({
           content: `❌ Miniboss Giveaway cannot proceed due to insufficient participants. [Giveaway Link](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,
         });
-        console.warn(`[DEBUG] [giveawayEnd.ts] ❌ Miniboss Giveaway cannot proceed due to insufficient participants.`);
-
         return;
       }
     }
@@ -111,8 +116,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     let participantsWithWeights: string[] = [];
 
     if (useExtraEntries) {
-      console.log(`📌 Applying extra entries for Giveaway ${giveawayId}.`);
-
       const extraEntriesData = await ExtraEntries.findAll({ where: { guildId } });
       const roleBonusMap = new Map(extraEntriesData.map(entry => [entry.roleId, entry.bonusEntries]));
 
@@ -135,7 +138,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       participantsWithWeights.push(...participants);
     }
 
-    // ✅ **Merge Guaranteed Winners & Randomly Pick Others**
     let availableWinners = [...new Set([...guaranteedWinners, ...participantsWithWeights])];
 
     while (winnerList.length < maxWinners && availableWinners.length > 0) {
@@ -155,7 +157,7 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     // ✅ **Modify only the winners & participant fields**
     const updatedEmbed = EmbedBuilder.from(existingEmbed)
         .setFields(
-            ...existingEmbed.fields.filter(field => !["🎟️ Total Participants", "🏆 Winners", "⏳ Ends In"].includes(field.name)), // Preserve other fields
+            ...existingEmbed.fields.filter(field => !["🎟️ Total Participants", "🏆 Winners", "⏳ Ends In"].includes(field.name)),
             { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true },
             { name: "🏆 Winners", value: winners, inline: true },
             { name: "⏳ Ends In", value: ":warning: Ended!", inline: true}
@@ -168,7 +170,6 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
     );
 
     await giveawayMessage.edit({ embeds: [updatedEmbed], components: [disabledButtons] });
-
 
     await channel.send({
       content: `🎉 **Giveaway Ended!** 🎉\n🏆 **Winners:** ${winners}\n🔗 [Giveaway Link](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,
