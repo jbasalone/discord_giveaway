@@ -48,7 +48,10 @@ import { execute as executeStartSecret } from './commands/startSecretGiveaway';
 import { execute as executeSetSummary } from './commands/setSummary';
 import { execute as executeBugCreate } from './commands/bugs';
 import { execute as executeUpdateBug } from './commands/updateBug';
-import { execute as executeEditTemplate } from './commands/editTemplate'
+import { execute as executeEditTemplate } from './commands/editTemplate';
+import { execute as executeRequestGiveaway } from './commands/submitGiveaway';
+import { execute as executeApproveGiveaway } from './commands/pendingGiveaways'
+import { execute as executeSetTTRoles } from './commands/setMinibossRoles'
 
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
@@ -160,6 +163,9 @@ async function startBot() {
           case 'mylevel':
             await executeMyLevel(message);
             break;
+          case 'pending': case 'requests':
+            await executeApproveGiveaway(message);
+            break;
           case 'reroll':
             await executeReroll(message, args);
             break;
@@ -187,6 +193,9 @@ async function startBot() {
           case 'setminibosschannel': case 'setmbch':
             await executeSetMinibossChannel(message, args);
             break;
+          case 'setminibossroles': case 'setmbroles':
+            await executeSetTTRoles(message, args)
+            break;
           case 'setsecret':
             await executeSetSecret(message, args);
             break;
@@ -201,6 +210,9 @@ async function startBot() {
             break;
           case 'starttemplate': case 'start':
             await executeStartTemplate(message, args);
+            break;
+          case 'submitga': case 'submit':
+            await executeRequestGiveaway(message);
             break;
           case 'update':
             await executeUpdateBug(message, args);

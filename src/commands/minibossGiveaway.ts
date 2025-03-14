@@ -149,23 +149,56 @@ export async function execute(message: Message, rawArgs: string[]) {
     console.log(`✅ [DEBUG] [minibossGiveaway.ts] Final Guaranteed Winners:`, guaranteedWinners);
 
     let roleId: string | null = null;
-    if (guildSettings) {
-        const roleMappings: Record<string, string> = JSON.parse(guildSettings.get("roleMappings") || "{}");
-        const roleArgIndex = rawArgs.indexOf("--role");
-        if (roleArgIndex !== -1 && roleArgIndex + 1 < rawArgs.length) {
-            let roleName = rawArgs[roleArgIndex + 1];
-            roleId = roleMappings[roleName] || null;
-            rawArgs.splice(roleArgIndex, 2);
+    const roleMappings: Record<string, string> = JSON.parse(guildSettings.get("roleMappings") || "{}");
+    const ttLevelMappings: Record<string, string> = JSON.parse(guildSettings.get("ttLevelRoles") || "{}");
+
+// ✅ Step 1: Check if `--role` is provided
+    const roleArgIndex = rawArgs.indexOf("--role");
+    if (roleArgIndex !== -1 && roleArgIndex + 1 < rawArgs.length) {
+        let roleName = rawArgs[roleArgIndex + 1];
+        roleId = roleMappings[roleName] || roleName; // Allow both role name & ID
+        rawArgs.splice(roleArgIndex, 2);
+    }
+
+// ✅ Step 2: If `--role` is not provided, calculate TT Level & use mappings
+    if (!roleId) {
+        const hostStats = await getUserMinibossStats(message.author.id);
+        if (!hostStats) return message.reply("⚠️ Your stats are not set! Use: `!setlevel <your_level> <tt_level>`.");
+
+        const { userLevel, ttLevel } = hostStats;
+        const { min, max } = calculateCoinWinnings(userLevel, ttLevel);
+        const minRequiredTT = calculateMinimumTTLevel(max);
+
+        console.log(`✅ [DEBUG] Min Required TT Level: ${minRequiredTT}`);
+
+        // Select appropriate role based on TT level
+        if (minRequiredTT >= 25 && ttLevelMappings["TT25"]) {
+            roleId = ttLevelMappings["TT25"];
+        } else if (minRequiredTT >= 1 && minRequiredTT <= 24 && ttLevelMappings["TT1-25"]) {
+            roleId = ttLevelMappings["TT1-25"];
+        } else if (minRequiredTT === 0 && ttLevelMappings["TT01"]) {
+            roleId = ttLevelMappings["TT01"];
+        } else {
+            return message.reply("❌ No valid TT level mappings found in `guild_settings`. An admin needs to configure `ttLevelRoles`.");
         }
     }
 
+    console.log(`✅ [DEBUG] Selected Role ID: ${roleId}`);
     let forceStart: boolean = rawArgs.includes("--force");
 
     if (savedGiveaway) {
         forceStart = Boolean(savedGiveaway.get("forceStart")) || forceStart; // ✅ Convert to boolean first
     }
 
-    const roleMention = roleId ? `<@&${roleId}>` : "None";
+    let roleMention = "None";
+
+    if (roleId) {
+        const roleExists = message.guild.roles.cache.has(roleId);
+        if (!roleExists) {
+            return message.reply(`❌ The role ID **${roleId}** is invalid or does not exist.`);
+        }
+        roleMention = `<@&${roleId}>`;
+    }
     const currentTime = Math.floor(Date.now() / 1000);
     const endsAt = currentTime + Math.ceil(durationMs / 1000);
 
@@ -196,6 +229,9 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (roleId) {
         await channel.send(`${roleMention} **MB Giveaway**`);
     }
+    console.log(`✅ [DEBUG] Selected Role ID: ${roleId}`);
+    console.log(`✅ [DEBUG] Role Mention: ${roleMention}`);
+    console.log(`✅ [DEBUG] TT Level Mappings:`, ttLevelMappings);
 
     let giveawayMessage = await channel.send({ embeds: [embed] });
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
