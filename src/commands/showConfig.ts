@@ -5,7 +5,7 @@ import { ExtraEntries } from '../models/ExtraEntries';
 import { BlacklistedRoles } from '../models/BlacklistedRoles';
 import { AllowedGiveawayChannels } from '../models/AllowedGiveawayChannels';
 import { MinibossRoles } from '../models/MinibossRoles';
-import { SecretGiveawaySettings } from '../models/SecretGiveaway'; // Import secret giveaways settings
+import { SecretGiveawaySettings } from '../models/SecretGiveaway';
 
 export async function execute(message: Message, guildId?: string) {
   if (!message.guild) {
@@ -51,14 +51,8 @@ export async function execute(message: Message, guildId?: string) {
 
     //  Fetch Miniboss Allowed Roles
     const minibossRoles = await MinibossRoles.findAll({ where: { guildId } });
-
     const minibossRolesText = minibossRoles.length > 0
-        ? minibossRoles
-            .map(entry => {
-              const roleId = entry.get("roleId") ?? null;
-              return roleId ? `<@&${roleId}>` : "❌ Unknown Role";
-            })
-            .join(", ")
+        ? minibossRoles.map(entry => `<@&${entry.get("roleId")}>`).join(", ")
         : "❌ No roles assigned to start Miniboss giveaways.";
 
     //  Fetch Blacklisted Roles
@@ -97,6 +91,18 @@ export async function execute(message: Message, guildId?: string) {
       }
     }
 
+    // ✅ **Fetch Miniboss TT Level Roles**
+    let minibossTTRoles: Record<string, string> = {};
+    try {
+      minibossTTRoles = JSON.parse(guildSettings.get("ttLevelRoles") ?? "{}");
+    } catch {
+      minibossTTRoles = {};
+    }
+
+    const minibossTTRolesText = Object.keys(minibossTTRoles).length > 0
+        ? Object.entries(minibossTTRoles).map(([ttLevel, roleId]) => `**${ttLevel}**: <@&${roleId}>`).join("\n")
+        : "❌ No Miniboss TT Level roles set.";
+
     // ✅ **Create Compact Embed**
     const embed = new EmbedBuilder()
         .setTitle(`⚙️ Server Giveaway Configuration`)
@@ -109,6 +115,7 @@ export async function execute(message: Message, guildId?: string) {
             { name: "📌 Miniboss Channel", value: minibossChannelMention, inline: true },
             { name: "🔐 Allowed Roles", value: allowedRolesText, inline: false },
             { name: "👑 Miniboss Roles", value: minibossRolesText, inline: false },
+            { name: "⚔️ Miniboss TT Level Roles", value: minibossTTRolesText, inline: false }, // ✅ Added this field
             { name: "📣 Giveaway Ping Roles", value: roleMappingsText, inline: false },
             { name: "🎟️ Extra Entry Roles", value: extraEntriesText, inline: false },
             { name: "🚫 Blacklisted Roles", value: blacklistedRolesText, inline: false },
