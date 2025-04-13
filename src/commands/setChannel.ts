@@ -1,5 +1,6 @@
 import { Message, PermissionsBitField, TextChannel, GuildChannel } from 'discord.js';
 import { AllowedGiveawayChannels } from '../models/AllowedGiveawayChannels';
+import { GuildSettings } from '../models/GuildSettings';
 
 export async function execute(message: Message, args: string[]) {
     if (!message.guild) {
@@ -11,6 +12,8 @@ export async function execute(message: Message, args: string[]) {
     }
 
     const guildId = message.guild.id;
+    const settings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = settings?.get("prefix") || "!";
     const channel = message.mentions.channels.first() || message.channel;
 
     //  Ensure channel is a GuildChannel and has a name
@@ -28,5 +31,7 @@ export async function execute(message: Message, args: string[]) {
         return message.reply(`✅ Removed **#${channel.name}** from allowed giveaway channels.`);
     }
 
-    return message.reply("❌ Usage: `!ga setchannel add #channel` or `!ga setchannel remove #channel`.");
+    return message.reply(`❌ Usage:\n` +
+        `\`\`\n ${prefix} ga setchannel add #channel\n\`\`\`\n` +
+        `\`\`\`\n ${prefix} ga setchannel remove #channel\n\`\`\``);
 }

@@ -29,6 +29,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     const guildId = message.guild.id;
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = guildSettings?.get("prefix") || "!";
     const argMatches = rawArgs.join(" ").match(/"([^"]+)"|[^\s]+/g) || [];
     const parsedArgs = argMatches.map(arg => arg.replace(/^"|"$/g, '').trim());
     let remainingArgs = [...parsedArgs];
@@ -60,6 +61,20 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     console.log("🔍 [DEBUG][CUSTOMGIVEAWAY.ts] Raw Args:", rawArgs);
+    let targetChannel: TextChannel = message.channel as TextChannel;
+
+    const lastArg = rawArgs[rawArgs.length - 1];
+    const match = lastArg?.match(/^<#(\d+)>$/); // Discord channel mention format
+
+    if (match) {
+        const channelId = match[1];
+        const found = message.guild.channels.cache.get(channelId);
+        if (found?.isTextBased()) {
+            targetChannel = found as TextChannel;
+            rawArgs.pop(); // remove channel mention from args
+            console.log(`✅ [DEBUG] Using target channel override: ${channelId}`);
+        }
+    }
 
     // ✅ **Check if the first argument is a valid template ID**
     let templateId: number | null = null;
@@ -79,11 +94,13 @@ export async function execute(message: Message, rawArgs: string[]) {
     titleParts = rawArgs.splice(0, durationIndex);
     let title = titleParts.join(" ").trim();
     if (!title || title.match(/^\d+(s|m|h|d)$/)) {
-        return message.reply("❌ Invalid title. Example: `!ga custom \"Super Giveaway\" 30m 1 --field \"Requirement: Level 50+\" --role VIP`.");
+        return message.reply(`❌ Invalid title. Example:\n\`\`\`\n ${prefix} ga custom \"Super Giveaway\" 30m 1 --field \"Requirement: Level 50+\" --role VIP\n\`\`\``);
     }
 
     if (title.length === 0) {
-        return message.reply("❌ Missing title. Example: `!ga custom \"Super Giveaway\" 30m 1 --field \"Requirement: Level 50+\" --role VIP`.");
+        return message.reply(
+            `❌ Missing title. Example:\n\`\`\`\n ${prefix} ga custom \"Super Giveaway\" 30m 1 --field \"Requirement: Level 50+\" --role VIP\n\`\`\``
+        );
     }
 
 // ✅ Extract duration & winner count properly
@@ -163,7 +180,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     console.log(`✅ [DEBUG] Parsed Extra Fields:`, extraFields);
 
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
-    const channel = message.channel as TextChannel;
+    const channel = targetChannel;
     let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
     console.log(`✅ [DEBUG] Final Parsed Values -> Title: "${title}", Duration: "${durationMs}ms", Winner Count: "${winnerCount}"`);
 
@@ -228,7 +245,6 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     let giveawayMessage = await channel.send({ content: rolePing, embeds: [embed] });
-
 
     // ✅ **Create "Join" and "Leave" Buttons**
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(

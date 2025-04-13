@@ -22,6 +22,7 @@ export async function handleMinibossCommand(
 ) {
     giveawayId = String(giveawayId);
     console.log(`🔍 Handling Miniboss Giveaway: ${giveawayId}`);
+    let giveawayTerminated = false;
 
     let giveaway = await Giveaway.findByPk(giveawayId);
     if (!giveaway) {
@@ -90,6 +91,7 @@ export async function handleMinibossCommand(
     let commandText = "";
 
     async function sendCommandButtons() {
+        if (giveawayTerminated) return; // ✅ Avoid repeating "⚔️ Miniboss Ready!"
         const botId = "555955826880413696";
         const winnerMentions = finalWinners.map(id => `<@${id}>`).join(" ");
         commandText = `<@${botId}> miniboss ${winnerMentions}`;
@@ -123,14 +125,14 @@ export async function handleMinibossCommand(
             const isOverCap = msg.content.toLowerCase().includes("you can't do this because") &&
                 msg.content.toLowerCase().includes("too many coins");
             const isMinibossWin = msg.embeds.length > 0 && msg.embeds[0]?.title?.includes("HAS BEEN DEFEATED!");
+            const isEnded = msg.content.includes("Miniboss Giveaway Ended!"); // ✅ detect end message content
 
-            if (isMinibossWin) {
-                console.log(`🏆 Miniboss success detected! Revoking access & ending process.`);
+            if (isMinibossWin || isEnded) {
+                console.log(`🏁 Miniboss marked as ended. Stopping collectors and access.`);
                 updateChannelAccess(finalWinners, false);
                 restrictionCollector.stop();
                 return false;
             }
-
             return isFromBot && (isCooldown || isOverCap);
         },
         time: 600000,
@@ -242,6 +244,8 @@ export async function handleMinibossCommand(
 
             restrictedUsers.delete(giveawayId);
             await sendCommandButtons(); // Re-send command buttons
+            await Giveaway.destroy({ where: { id: giveawayId } });
+            console.log(`🧹 Giveaway ${giveawayId} cleaned from database after successful end.`);
         }
 
         if (interaction.customId === `give-1m-${giveawayId}`) {
@@ -268,10 +272,12 @@ export async function handleMinibossCommand(
         }
 
         if (interaction.customId === `end-ga-${giveawayId}`) {
-            await minibossChannel.send({content: `❌ **Miniboss Giveaway has been canceled by the host.**`});
+            giveawayTerminated = true; // ✅ Stop future button reposts
+            await minibossChannel.send({ content: `❌ **Miniboss Giveaway has been canceled by the host.**` });
             await updateChannelAccess(finalWinners, false);
             buttonCollector.stop();
             restrictionCollector.stop();
         }
+
     });
 }

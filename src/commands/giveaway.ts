@@ -24,8 +24,9 @@ export async function execute(message: Message, rawArgs: string[]) {
         return message.reply("  ❌ This command must be used inside a server.");
     }
 
-    const guildId = message.guild.id;
+    const guildId = message.guild?.id;
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = guildSettings?.get("prefix") || "!";
 
     if (!guildSettings) {
         return message.reply("❌ Guild settings not found. Admins need to configure GA System first.");
@@ -87,7 +88,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
 // ✅ Ensure required values are provided
     if (!durationStr || !winnerCountStr) {
-        return message.reply("❌ Invalid format! Example: `ga create \"Super Giveaway\" 30s 1` or `!ga create 30s 1`.");
+        return message.reply(`❌ Invalid format! Examples:\n\`\`\`\n ${prefix} ga create \"Super Giveaway\" 30s 1\n\`\`\`\n ${prefix} ga create 30s 1\n\`\`\``);
     }
 
 // ✅ Convert & Validate Duration

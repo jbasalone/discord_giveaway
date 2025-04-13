@@ -10,13 +10,17 @@ export async function execute(message: Message, args: string[]) {
         return message.reply("❌ You need **Administrator** permissions to set the Miniboss channel.");
     }
 
+    const guildId = message.guild?.id;
+    const settings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = settings?.get("prefix") || "!";
+
     // ✅ **Fix: Ensure Proper Channel Detection**
     if (args.length < 1 || !message.mentions.channels.first()) {
-        return message.reply("❌ **Invalid command!** Example: `!ga setminibosschannel #miniboss-events`");
+        return message.reply(`❌ **Invalid command!** Example:\n\`\`\`\n ${prefix} ga setmbch #miniboss-events\n\`\`\``);
     }
 
     const channel = message.mentions.channels.first() as TextChannel;
-    const guildId = message.guild.id;
+
 
     try {
         // ✅ **Check if the GuildSettings entry exists**

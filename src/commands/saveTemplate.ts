@@ -1,15 +1,20 @@
 import { Message, Role } from "discord.js";
 import { SavedGiveaway } from "../models/SavedGiveaway";
 import { convertToMilliseconds } from "../utils/convertTime";
+import { GuildSettings } from '../models/GuildSettings';
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) {
         return message.reply("❌ This command must be used inside a server.");
     }
 
+    const guildId = message.guild?.id;
+    const settings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = settings?.get("prefix") || "!";
+
     if (rawArgs.length < 3) {
         return message.reply(
-            "❌ Invalid usage! Example: `!ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User`"
+            `❌ Invalid usage! Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User\n\`\`\``
         );
     }
 
@@ -38,7 +43,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         args.splice(0, 2); // Remove `--type custom` from args
     } else {
         return message.reply(
-            "❌ **Missing `--type` flag!** Example: `!ga save --type custom \"My Giveaway\" 30s --field \"Reward: Nitro\"`"
+            `❌ **Missing --type flag!** Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: Nitro\"\n\`\`\``
         );
     }
 
@@ -105,7 +110,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     // ✅ **Extract Required Parameters**
     if (mainArgs.length < 2) {
         return message.reply(
-            "❌ Invalid usage! Example: `!ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User`."
+            `❌ Invalid usage! Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User\n\`\`\``
         );
     }
 

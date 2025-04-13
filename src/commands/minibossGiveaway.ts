@@ -48,6 +48,12 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) return message.reply("❌ This command must be used inside a server.");
     const channel = message.channel as TextChannel;
     const guildId = message.guild.id;
+    let templateId: number | null = !isNaN(Number(rawArgs[0])) ? parseInt(rawArgs[0], 10) : null;
+    if (templateId !== null) {
+        rawArgs.shift(); // ✅ Only shift args if templateId exists
+    }
+    console.log(`✅ [DEBUG] Extracted Template ID: ${templateId}`);
+
 
     const activeMiniboss = await Giveaway.findOne({
         where: { guildId, type: "miniboss", endsAt: { [Op.gt]: Math.floor(Date.now() / 1000) } },
@@ -71,10 +77,17 @@ export async function execute(message: Message, rawArgs: string[]) {
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
     if (!guildSettings) return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
 
-    let templateId: number | null = !isNaN(Number(rawArgs[0])) ? parseInt(rawArgs.shift()!, 10) : null;
+    console.log(`🔍 [DEBUG] Fetching SavedGiveaway for template ID: ${templateId}`);
+
+    console.log(`🔍 [DEBUG] Fetching SavedGiveaway for template ID: ${templateId}`);
+
     let savedGiveaway: SavedGiveaway | null = templateId !== null
         ? await SavedGiveaway.findOne({ where: { id: templateId } })
         : null;
+
+    console.log(`✅ [DEBUG] SavedGiveaway Query Result:`, savedGiveaway ? savedGiveaway.toJSON() : "Not Found");
+    console.log(`✅ [DEBUG] [minibossGiveaway] Retrieved savedGiveaway ID: ${savedGiveaway?.get("id") || "Not Found"}`);
+    console.log(`✅ [DEBUG] [minibossGiveaway]  Retrieved forceStart from savedGiveaway: ${savedGiveaway?.get("forceStart")}`);
 
     let title: string = "Miniboss Giveaway";
     let durationMs: number = 60000; // Default to 1 minute
@@ -184,11 +197,8 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     console.log(`✅ [DEBUG] Selected Role ID: ${roleId}`);
-    let forceStart: boolean = rawArgs.includes("--force");
-
-    if (savedGiveaway) {
-        forceStart = Boolean(savedGiveaway.get("forceStart")) || forceStart; // ✅ Convert to boolean first
-    }
+    let forceStart = savedGiveaway?.get("forceStart") ?? (rawArgs.includes("--force") ? 1 : 0);
+    console.log(`🚀 [DEBUG] Final forceStart value before inserting into DB: ${forceStart}`);
 
     let roleMention = "None";
 
@@ -241,6 +251,8 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     await giveawayMessage.edit({ embeds: [embed], components: [row] });
 
+    console.log(`🚀 [DEBUG] [minibossgiveaway] Inserting giveaway with forceStart:`, forceStart);
+
     const createdGiveaway = await Giveaway.create({
         guildId: message.guild.id,
         host: hostId,
@@ -257,8 +269,9 @@ export async function execute(message: Message, rawArgs: string[]) {
         extraFields: JSON.stringify(extraFields),
         guaranteedWinners: JSON.stringify(guaranteedWinners),
         status: "approved",
-        forceStart: forceStart ? 1 : 0
+        forceStart: forceStart,
     });
+    console.log(`✅ [DEBUG] [minibossGiveaway] ${createdGiveaway.id} with forceStart: ${createdGiveaway.forceStart}`);
 
     startLiveCountdown(createdGiveaway.id, message.client);
 }

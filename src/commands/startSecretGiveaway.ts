@@ -13,6 +13,7 @@ import { startLiveCountdown } from "../utils/giveawayTimer";
 import { client } from "../index";
 import { SecretGiveawaySettings } from "../models/SecretGiveaway";
 import { updateSecretGiveawaySummary } from "../utils/secretGiveawayUtils";
+import { GuildSettings } from '../models/GuildSettings';
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -27,7 +28,9 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (!settings || !settings.get("enabled")) {
         return message.reply("❌ Secret giveaways are not enabled on this server.");
     }
-
+    const guildId = message.guild?.id;
+    const guildSettings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = guildSettings?.get("prefix") || "!";
 
 
     // ✅ **Extract & Validate Arguments**
@@ -36,7 +39,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     const messageContent = rawArgs.slice(2).join(" ") || "A secret giveaway is happening right now!";
 
     if (maxWinners < 1 || durationHours < 1) {
-        return message.reply("❌ Invalid arguments! Example usage: `!ga secret 10 48 \"Hidden giveaway message!\"`");
+        return message.reply(`❌ Invalid arguments! Example usage::\n\`\`\`\n${prefix} ga 10 48 \"Hidden giveaway message!\"\n\`\`\``);
     }
 
     console.log(`🎭 Starting Secret Giveaway: ${maxWinners} Winners, ${durationHours} Hours.`);

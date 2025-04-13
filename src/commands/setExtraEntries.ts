@@ -1,5 +1,7 @@
 import { Message, PermissionsBitField } from 'discord.js';
 import { ExtraEntries } from '../models/ExtraEntries';
+import { GuildSettings } from '../models/GuildSettings';
+
 
 export async function execute(message: Message, args: string[], guildId: string) {
   if (!message.guild) {
@@ -10,8 +12,12 @@ export async function execute(message: Message, args: string[], guildId: string)
     return message.reply("❌ You need **Administrator** permissions to set extra entry roles.");
   }
 
+  const guild = message.guild?.id;
+  const settings = await GuildSettings.findOne({ where: { guild } });
+  const prefix = settings?.get("prefix") || "!";
+
   if (args.length < 2) {
-    return message.reply("❌ Usage: `!ga setextraentry @role <entries>` - Assigns extra entries to a role.");
+    return message.reply(`❌ Usage:\n\`\`\`\n${prefix} ga setextraentry @role <entries>\n\`\`\``);
   }
 
   const role = message.mentions.roles.first();

@@ -52,6 +52,7 @@ import { execute as executeEditTemplate } from './commands/editTemplate';
 import { execute as executeRequestGiveaway } from './commands/submitGiveaway';
 import { execute as executeApproveGiveaway } from './commands/pendingGiveaways'
 import { execute as executeSetTTRoles } from './commands/setMinibossRoles'
+import { execute as executeForceEnd } from './commands/forceGiveawayEnd'
 
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
@@ -142,6 +143,9 @@ async function startBot() {
           case 'edit':
             await executeEditTemplate(message, args);
             break;
+          case 'end': case 'forceend':
+            await executeForceEnd(message, args);
+            break;
           case 'help':
             await executeHelp(message);
             break;
@@ -190,7 +194,7 @@ async function startBot() {
           case 'setlevel': case 'level':
             await executeSetLevel(message, args);
             break;
-          case 'setminibosschannel': case 'setmbch':
+          case 'setminibosschannel': case 'setmbch': case 'mbch':
             await executeSetMinibossChannel(message, args);
             break;
           case 'setminibossroles': case 'setmbroles':

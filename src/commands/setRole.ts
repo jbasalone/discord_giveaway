@@ -21,17 +21,19 @@ export async function execute(message: Message, args: string[]) {
   }
 
   const guildId = message.guild?.id ?? "";
-
+  let guildSettings = await GuildSettings.findOne({ where: { guildId } });
+  const prefix = guildSettings?.get("prefix") || "!";
   const subCommand = args.shift()?.toLowerCase();
 
   if (!subCommand || !["--allowed", "--role", "--miniboss"].includes(subCommand)) {
-    return message.reply("❌ Invalid usage! Example:\n" +
-        "`!ga setrole --allowed add/remove GiveawayManager MinibossMaster`\n" +
-        "`!ga setrole --role add/remove GiveawayPings: @Winners`\n" +
-        "`!ga setrole --miniboss add/remove @role`");
+    return message.reply(
+        `❌ Invalid usage! Examples:\n` +
+        `\`\`\`\n${prefix} ga setrole --allowed add/remove GiveawayManager MinibossMaster\n\`\`\`\n` +
+        `\`\`\`\n${prefix} ga setrole --role add/remove GiveawayPings: @Winners\n\`\`\`\n` +
+        `\`\`\`\n${prefix} ga setrole --miniboss add/remove @role\n\`\`\``
+    );
   }
 
-  let guildSettings = await GuildSettings.findOne({ where: { guildId } });
 
   if (!guildSettings) {
     guildSettings = await GuildSettings.create({ guildId });
@@ -40,7 +42,7 @@ export async function execute(message: Message, args: string[]) {
   if (subCommand === "--allowed") {
     const action = args.shift()?.toLowerCase() ?? "";
     if (!["add", "remove"].includes(action)) {
-      return message.reply("❌ Usage: `!ga setrole --allowed add/remove <role>`.");
+      return message.reply(`❌ Usage: \n\`\`\`\n ${prefix} ga setrole --allowed add/remove <role>\n\`\`\`\``);
     }
 
     let existingRoles: string[] = [];
@@ -76,7 +78,7 @@ export async function execute(message: Message, args: string[]) {
   if (subCommand === "--role") {
     const action = args.shift()?.toLowerCase() ?? "";
     if (!["add", "remove"].includes(action)) {
-      return message.reply("❌ Usage: `!ga setrole --role add/remove RoleName: @RoleMention`.");
+      return message.reply(`❌ Usage: \n\`\`\`\n ${prefix} ga setrole --role add/remove RoleName: @RoleMention\n\`\`\`\``);
     }
 
     let roleMappings: Record<string, string> = {};
@@ -123,7 +125,7 @@ export async function execute(message: Message, args: string[]) {
     const action = args.shift()?.toLowerCase() ?? "";
 
     if (!["add", "remove"].includes(action)) {
-      return message.reply("❌ Usage: `!ga setrole --miniboss add/remove @role`.");
+      return message.reply(`❌ Usage:\n\`\`\`\n ${prefix} ga setrole --miniboss add/remove @role\n\`\`\``);
     }
 
     const role = message.mentions.roles.first();

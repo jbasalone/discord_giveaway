@@ -1,6 +1,8 @@
 import { Message, PermissionsBitField, TextChannel, EmbedBuilder, Colors } from "discord.js";
 import { SecretGiveawaySettings } from "../models/SecretGiveaway";
 import { Giveaway } from "../models/Giveaway";
+import { GuildSettings } from '../models/GuildSettings';
+
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -10,8 +12,11 @@ export async function execute(message: Message, rawArgs: string[]) {
     const guildId = message.guild?.id;
     if (!guildId) return;
 
+    const settings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = settings?.get("prefix") || "!";
+
     if (rawArgs.length === 0) {
-        return message.reply("❌ Usage: `!ga setsummary #channel`");
+        return message.reply(`❌ Usage:\n\`\`\`\n ${prefix} ga  setsummary #channel\n\`\`\``);
     }
 
     const channelMention = rawArgs[0];

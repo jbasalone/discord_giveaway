@@ -1,13 +1,19 @@
 import { Message, PermissionsBitField } from 'discord.js';
 import { SavedGiveaway } from '../models/SavedGiveaway';
+import { GuildSettings } from '../models/GuildSettings';
 
 export async function execute(message: Message, args: string[]) {
   if (!message.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
     return message.reply("❌ You need `Manage Messages` permission to delete a saved giveaway.");
   }
 
+
+  const guildId = message.guild?.id;
+  const settings = await GuildSettings.findOne({ where: { guildId } });
+  const prefix = settings?.get("prefix") || "!";
+
   if (args.length < 1) {
-    return message.reply("❌ Usage: `!ga delete <templateID>` - Delete a saved giveaway template.");
+    return message.reply(`❌ Usage:\n\`\`\`\n ${prefix} delete <templateID>\n\`\`\``);
   }
 
   const templateId = parseInt(args[0], 10);

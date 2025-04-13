@@ -1,13 +1,19 @@
 import { Message, PermissionsBitField } from 'discord.js';
 import { BotAccess } from '../models/BotAccess';
+import { GuildSettings } from '../models/GuildSettings';
+
+
 
 export async function execute(message: Message, args: string[]) {
     if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return message.reply("❌ You need **Administrator** permissions to use this command.");
     }
+    const guild = message.guild?.id;
+    const settings = await GuildSettings.findOne({ where: { guild } });
+    const prefix = settings?.get("prefix") || "!";
 
     if (!args[0] || !["add", "remove"].includes(args[0].toLowerCase())) {
-        return message.reply("❌ Usage: `!ga setbotaccess add/remove <guildId>`");
+        return message.reply(`❌ Usage: \n\`\`\`\n${prefix} ga setbotaccess add/remove <guildId>\n\`\`\``);
     }
 
     const action = args[0].toLowerCase();

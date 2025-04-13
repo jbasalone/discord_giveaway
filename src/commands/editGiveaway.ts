@@ -1,15 +1,20 @@
 import { Message, TextChannel, EmbedBuilder } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { getGiveaway } from '../utils/getGiveaway';
+import { GuildSettings } from '../models/GuildSettings';
 
 export async function execute(message: Message, args: string[]) {
     try {
         if (!message.member?.permissions.has("ManageMessages")) {
             return message.reply("❌ You need `Manage Messages` permission to edit a giveaway.");
         }
+        const guildId = message.guild?.id;
+        const settings = await GuildSettings.findOne({ where: { guildId } });
+        const prefix = settings?.get("prefix") || "!";
 
         if (args.length < 2) {
-            return message.reply("❌ Usage: `!ga edit <giveawayID> <newTitle>` - Update a giveaway.");
+            return message.reply(`❌ Usage: \n\`\`\`\n ${prefix} ga edit <giveawayID> <newTitle>\n\`\`\``
+            );
         }
 
         const giveawayId = args[0];

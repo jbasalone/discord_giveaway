@@ -1,10 +1,17 @@
 import { Message } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
+import { GuildSettings } from '../models/GuildSettings';
+
+
 
 export async function execute(message: Message, args: string[]) {
+  const guildId = message.guild?.id;
+  const settings = await GuildSettings.findOne({ where: { guildId } });
+  const prefix = settings?.get("prefix") || "!";
   if (args.length < 1) {
-    return message.reply("❌ Usage: `!ga reroll <giveawayID>` - Select new winners.");
+    return message.reply(`❌ Usage: ${prefix} reroll <giveawayID> - Select new winners.`);
   }
+
 
   const giveawayId = args[0];
 

@@ -1,9 +1,14 @@
 import { Message } from 'discord.js';
 import { UserProfile } from '../models/UserProfile';
+import { GuildSettings } from '../models/GuildSettings';
+
 
 export async function execute(message: Message, args: string[]) {
+    const guildId = message.guild?.id;
+    const settings = await GuildSettings.findOne({ where: { guildId } });
+    const prefix = settings?.get("prefix") || "!";
     if (args.length < 1) {
-        return message.reply("❌ Please provide your level and optionally your TT level. Example: `!setlevel 10000 50`.");
+        return message.reply(`❌ Please provide your level and optionally your TT level. Example:\n\`\`\`\n ${prefix} ga setlevel 10000 50\n\`\`\``);
     }
 
     const userLevel = parseInt(args[0], 10);

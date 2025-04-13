@@ -45,6 +45,7 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
         console.log(`🚀 [DEBUG] Starting ${type} Giveaway from Template ID: ${templateId}`);
 
         let argsToPass: string[] = [
+            String(templateId),
             String(title),
             String(durationMs),
             String(parsedWinnerCount)
@@ -79,11 +80,12 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
                 guaranteedWinners: "[]",
                 winnerCount: parsedWinnerCount,
                 extraFields: Object.keys(parsedExtraFields).length > 0 ? JSON.stringify(parsedExtraFields) : null,
-                forceStart: false,
+                forceStart: Number(savedGiveaway.get("forceStart")) === 1 ? 1 : 0,
                 useExtraEntries: false,
             });
 
             console.log(`✅ [DEBUG] Giveaway Added to Database (ID: ${giveawayEntry.id})`);
+            console.log(`🚀 [DEBUG] Creating Giveaway with forceStart:`, savedGiveaway.get("forceStart"));
         }
 
         let giveawayMessage;
