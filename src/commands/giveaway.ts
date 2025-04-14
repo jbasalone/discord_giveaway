@@ -50,6 +50,20 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     console.log("🔍 [DEBUG] Raw Args:", rawArgs);
+    let targetChannel: TextChannel = message.channel as TextChannel;
+
+    const lastArg = rawArgs[rawArgs.length - 1];
+    const channelMatch = lastArg?.match(/^<#(\d+)>$/);
+
+    if (channelMatch) {
+        const channelId = channelMatch[1];
+        const found = message.guild.channels.cache.get(channelId);
+        if (found?.isTextBased()) {
+            targetChannel = found as TextChannel;
+            rawArgs.pop(); // Remove the channel mention from args
+            console.log(`✅ [DEBUG] Target channel override detected: ${channelId}`);
+        }
+    }
 
     // **Sanitize all incoming arguments**
     rawArgs = rawArgs.map(sanitizeArg);
@@ -88,7 +102,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
 // ✅ Ensure required values are provided
     if (!durationStr || !winnerCountStr) {
-        return message.reply(`❌ Invalid format! Examples:\n\`\`\`\n ${prefix} ga create \"Super Giveaway\" 30s 1\n\`\`\`\n ${prefix} ga create 30s 1\n\`\`\``);
+        return message.reply(`❌ Invalid format! Examples:\n\`\`\`\n ${prefix} ga create \"Super Giveaway\" 30s 1 --role <rolename> #CHANNEL\n\`\`\`\n ${prefix} ga create 30s 1\n\`\`\``);
     }
 
 // ✅ Convert & Validate Duration
@@ -161,7 +175,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
-    const channel = message.channel as TextChannel;
+    const channel = targetChannel;
 
     let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
     let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
@@ -217,7 +231,7 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     await giveawayMessage.edit({ components: [row] });
 
-    // ✅ **Create Giveaway Entry in Database**
+// ✅ **Create Giveaway Entry in Database**
     const giveawayData = await Giveaway.create({
         guildId,
         host: hostId,
@@ -236,6 +250,6 @@ export async function execute(message: Message, rawArgs: string[]) {
         forceStart: false,
         useExtraEntries
     });
-    startLiveCountdown(Number(giveawayMessage.id), message.client);
 
+    startLiveCountdown(giveawayData.id, message.client);
 }

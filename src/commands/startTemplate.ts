@@ -3,6 +3,7 @@ import { SavedGiveaway } from '../models/SavedGiveaway';
 import { Giveaway } from '../models/Giveaway';
 import { execute as startCustomGiveaway } from '../commands/customGiveaway';
 import { execute as startMinibossGiveaway } from '../commands/minibossGiveaway';
+import { startLiveCountdown } from '../utils/giveawayTimer';
 
 export async function execute(message: Message, rawArgs: string[], isScheduled = false) {
 
@@ -98,10 +99,14 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
 // ✅ If this is a scheduled giveaway, update messageId in the DB
         if (isScheduled && giveawayEntry && giveawayMessage?.id) {
             await Giveaway.update(
-                {messageId: giveawayMessage.id},
-                {where: {id: giveawayEntry.id}}
+                { messageId: giveawayMessage.id },
+                { where: { id: giveawayEntry.id } }
             );
             console.log(`✅ [DEBUG] Stored message ID for scheduled giveaway: ${giveawayMessage.id}`);
+        }
+
+        if (isScheduled && giveawayEntry) {
+            await startLiveCountdown(giveawayEntry.id, message.client);
         }
 
     } catch (error) {

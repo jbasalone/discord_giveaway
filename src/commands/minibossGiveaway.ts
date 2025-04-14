@@ -46,7 +46,7 @@ function calculateMinimumTTLevel(maxCoins: number): number {
 
 export async function execute(message: Message, rawArgs: string[]) {
     if (!message.guild) return message.reply("❌ This command must be used inside a server.");
-    const channel = message.channel as TextChannel;
+    //const channel = message.channel as TextChannel; // already declared as targetChannel
     const guildId = message.guild.id;
     let templateId: number | null = !isNaN(Number(rawArgs[0])) ? parseInt(rawArgs[0], 10) : null;
     if (templateId !== null) {
@@ -74,6 +74,20 @@ export async function execute(message: Message, rawArgs: string[]) {
     if (!allowedChannel) return message.reply("❌ Giveaways can only be started in **approved channels**.");
 
     console.log("🔍 [DEBUG] Raw Args:", rawArgs);
+    let targetChannel: TextChannel = message.channel as TextChannel;
+
+    const lastArg = rawArgs[rawArgs.length - 1];
+    const match = lastArg?.match(/^<#(\d+)>$/);
+
+    if (match) {
+        const channelId = match[1];
+        const found = message.guild.channels.cache.get(channelId);
+        if (found?.isTextBased()) {
+            targetChannel = found as TextChannel;
+            rawArgs.pop(); // Remove from args list
+            console.log(`✅ [DEBUG] Overriding target miniboss channel to: ${channelId}`);
+        }
+    }
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
     if (!guildSettings) return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
 
@@ -237,13 +251,13 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     if (roleId) {
-        await channel.send(`${roleMention} **MB Giveaway**`);
+        await targetChannel.send(`${roleMention} **MB Giveaway**`);
     }
     console.log(`✅ [DEBUG] Selected Role ID: ${roleId}`);
     console.log(`✅ [DEBUG] Role Mention: ${roleMention}`);
     console.log(`✅ [DEBUG] TT Level Mappings:`, ttLevelMappings);
 
-    let giveawayMessage = await channel.send({ embeds: [embed] });
+    let giveawayMessage = await targetChannel.send({ embeds: [embed] });
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🐉").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave 💨").setStyle(ButtonStyle.Danger)
@@ -257,7 +271,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         guildId: message.guild.id,
         host: hostId,
         userId: hostId,
-        channelId: channel.id,
+        channelId: targetChannel.id,
         messageId: giveawayMessage.id,
         title,
         description: embed.data.description ?? "",

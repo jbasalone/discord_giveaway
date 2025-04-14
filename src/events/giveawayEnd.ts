@@ -108,11 +108,9 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       if (isForced || participants.length >= 9) {
         console.log(`✅ [DEBUG] Forced Miniboss Giveaway Ending or minimum participants met.`);
 
-        // 🚀 **Run Miniboss Giveaway**
-        // 🚀 **Run Miniboss Giveaway**
+
         await handleMinibossCommand(client, giveawayId, [...new Set([...participants])]);
 
-// ✅ **NEW: cleanup from DB after processing to prevent repeat**
         await Giveaway.destroy({ where: { id: giveawayId } });
         console.log(`🧹 Miniboss Giveaway ${giveawayId} cleaned from DB after successful execution.`);
 
@@ -124,7 +122,9 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
         await channel.send({
           content: `❌ Miniboss Giveaway cannot proceed due to insufficient participants.\n🔗 [Jump to Giveaway](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,
         });
-        // ✅ **Unlock cache even if miniboss fails (avoids stuck giveaways)**
+        await Giveaway.destroy({ where: { id: giveawayId } });
+        console.log(`🧹 Miniboss Giveaway ${giveawayId} removed after failure (not enough participants).`);
+
         cache.del(`giveaway-processing-${giveawayId}`);
       }
       return;
