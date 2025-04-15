@@ -11,9 +11,11 @@ import {
 
 import { Giveaway } from '../models/Giveaway';
 import { GuildSettings } from '../models/GuildSettings';
+import { rerollWinnersByMessageId } from '../utils/rerollUtils';
+
 
 // ✅ Store restricted users in memory (temporary cache)
-const restrictedUsers = new Map<string, string>();
+const restrictedUsers = new Map<string, Set<string>>();
 
 export async function handleMinibossCommand(
     client: Client,
@@ -156,7 +158,10 @@ export async function handleMinibossCommand(
 
         if (!restrictedUser) return;
 
-        restrictedUsers.set(giveawayId, restrictedUser);
+        if (!restrictedUsers.has(giveawayId)) {
+            restrictedUsers.set(giveawayId, new Set());
+        }
+        restrictedUsers.get(giveawayId)!.add(restrictedUser);
 
         const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
@@ -187,65 +192,52 @@ export async function handleMinibossCommand(
         }
 
         if (interaction.customId === `reroll-${giveawayId}`) {
-            let restrictedUser = restrictedUsers.get(giveawayId);
-            if (!restrictedUser) return;
+            const restrictedSet = restrictedUsers.get(giveawayId);
+            if (!restrictedSet || restrictedSet.size === 0) return;
 
-            const forceEnabled = Boolean(giveaway.get("forceStart")); // ✅ Ensure correct boolean handling
-            const actualHostId = giveaway.get("host"); // ✅ Ensure correct host ID is used
+            const actualHostId = giveaway.get("host");
+            const restrictedArray = Array.from(restrictedSet);
 
-            console.log(`📌 [DEBUG] Checking if restricted user (${restrictedUser}) is the host (${actualHostId})`);
-
-            // ❌ **If the restricted user is the host, warn them instead of rerolling**
-            if (restrictedUser === actualHostId) {
-                await minibossChannel.send({
-                    content: `⚠️ **<@${actualHostId}>, you are the host and cannot be rerolled!**\nPlease resolve your issue immediately.`,
-                });
-                return;
+            // ❌ Filter out host from reroll list
+            const safeRestricted = restrictedArray.filter(u => u !== actualHostId);
+            if (safeRestricted.length === 0) {
+                return minibossChannel.send(`⚠️ All restricted users are the host. Cannot reroll.`);
             }
 
-            // ✅ **Count non-host participants AFTER removing the restricted user**
-            const updatedParticipants = finalWinners.filter(id => id !== restrictedUser);
-            const remainingCount = updatedParticipants.length;
-
-            console.log(`📌 [DEBUG] Non-host participant count after removing restricted user: ${remainingCount}`);
-
-            // ❌ **If there are fewer than 9 non-host participants, deny reroll (even with --force)**
-            if (remainingCount < 9) {
-                await minibossChannel.send({
-                    content: `❌ **Reroll is not possible!** A **Miniboss requires at least 9  participants.**\n either give time or end the miniboss.`,
-                });
-                return;
+            // 🚫 Filter final winners
+            const updatedParticipants = finalWinners.filter(id => !safeRestricted.includes(id));
+            if (updatedParticipants.length < 9) {
+                return minibossChannel.send(`❌ Not enough valid participants remain after removing ${safeRestricted.length} restricted users.`);
             }
 
-            // ✅ **Proceed with rerolling only if there are 10 or more non-host participants**
-            finalWinners = updatedParticipants; // Remove restricted user
+            // ✅ Execute reroll
+            const newWinners = await rerollWinnersByMessageId(client, giveaway.get("messageId"));
+            if (!newWinners.length) {
+                return minibossChannel.send(`⚠️ Reroll failed. No eligible participants.`);
+            }
 
-            await minibossChannel.send({
-                content: `🔄 **New Winners:** ${finalWinners.map(id => `<@${id}>`).join(", ")}`,
-            });
+            await minibossChannel.send(`🔄 **New Rerolled Winners:** ${newWinners.map(id => `<@${id}>`).join(", ")}`);
 
-            // ✅ **Ensure we only update permissions for non-host participants**
-            if (restrictedUser !== actualHostId) {
+            // 🚪 Remove all restricted users from channel
+            for (const userId of safeRestricted) {
                 try {
-                    const member = await minibossChannel.guild.members.fetch(restrictedUser).catch(() => null);
+                    const member = await minibossChannel.guild.members.fetch(userId).catch(() => null);
                     if (member) {
                         await minibossChannel.permissionOverwrites.edit(member, {
                             ViewChannel: false,
                             SendMessages: false
                         });
-                        console.log(`🔑 [DEBUG] Removed channel access for ${restrictedUser}`);
-                    } else {
-                        console.warn(`⚠️ [DEBUG] Member ${restrictedUser} not found in guild. Skipping permission update.`);
                     }
-                } catch (error) {
-                    console.error(`❌ Error updating channel permissions for ${restrictedUser}:`, error);
+                } catch (e) {
+                    console.warn(`⚠️ Could not revoke access from ${userId}:`, e);
                 }
             }
 
+            // 🧼 Cleanup
             restrictedUsers.delete(giveawayId);
-            await sendCommandButtons(); // Re-send command buttons
+            await sendCommandButtons();
             await Giveaway.destroy({ where: { id: giveawayId } });
-            console.log(`🧹 Giveaway ${giveawayId} cleaned from database after successful end.`);
+            console.log(`🔁 Rerolled after removing restricted users: ${safeRestricted.join(", ")}`);
         }
 
         if (interaction.customId === `give-1m-${giveawayId}`) {

@@ -11,6 +11,8 @@ import { Giveaway } from '../models/Giveaway';
 import { ExtraEntries } from '../models/ExtraEntries';
 import { cache } from '../utils/giveawayCache';
 import { handleMinibossCommand } from './handleMinibossCommnand';
+import { saveJoiners } from '../utils/rerollCache';
+
 
 /**
  * Handles the end of a giveaway and processes winners.
@@ -57,6 +59,18 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       return;
     }
 
+    let participants: string[] = JSON.parse(giveaway.get("participants") ?? "[]");
+    await saveJoiners(
+        String(giveaway.get("messageId")),
+        guildId,
+        String(giveaway.get("channelId")),
+        participants,
+        Number(giveaway.get("winnerCount")) || 1,
+        JSON.parse(giveaway.get("guaranteedWinners") ?? "[]"),
+        0, // initial reroll count
+        giveawayId
+    );
+
     let giveawayMessage: Message | null = null;
     try {
       giveawayMessage = await channel.messages.fetch(String(giveaway.get("messageId")));
@@ -79,13 +93,24 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       } else {
         console.warn(`⚠️ Host ID is missing for giveaway ${giveawayId}. Cannot send DM.`);
       }
+      console.log(`🎟️ Total Participants for Giveaway ${giveawayId}: ${participants.length}`);
+      // ✅ Save participants to reroll backup
+      await saveJoiners(
+          String(giveaway.get("messageId")),
+          guildId,
+          String(giveaway.get("channelId")),
+          participants,
+          Number(giveaway.get("winnerCount")) || 1,
+          JSON.parse(giveaway.get("guaranteedWinners") ?? "[]"),
+          0, // initial reroll count
+          giveawayId
+      );
 
       await Giveaway.destroy({ where: { id: giveawayId } });
       console.log(`✅ Giveaway ${giveawayId} removed from the database.`);
       return;
     }
 
-    let participants: string[] = JSON.parse(giveaway.get("participants") ?? "[]");
     console.log(`🎟️ Total Participants for Giveaway ${giveawayId}: ${participants.length}`);
 
     if (participants.length === 0) {
