@@ -54,6 +54,7 @@ import { execute as executeApproveGiveaway } from './commands/pendingGiveaways'
 import { execute as executeSetTTRoles } from './commands/setMinibossRoles'
 import { execute as executeForceEnd } from './commands/forceGiveawayEnd'
 import { execute as executeUserStats } from './commands/stats'
+import { execute as executeCancelGA } from './commands/cancelGA'
 
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
@@ -123,11 +124,14 @@ async function startBot() {
           case 'listschedule': case 'listscheduled': case 'scheduled':
             await executeListSchedule(message, args);
             break;
-          case 'cancelschedule': case 'cancel':
+          case 'cancelschedule': case 'cancels':
             await executeCancelSchedule(message, args);
             break;
           case 'bug':
             await executeBugCreate(message);
+            break;
+          case 'cancel': case 'cancelga': case 'cga':
+            await executeCancelGA(message, args)
             break;
           case 'create': case 'quick':
             await executeGiveaway(message, args);
