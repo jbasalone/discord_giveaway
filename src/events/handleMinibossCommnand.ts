@@ -12,7 +12,7 @@ import {
 import { Giveaway } from '../models/Giveaway';
 import { GuildSettings } from '../models/GuildSettings';
 import { rerollWinnersByMessageId } from '../utils/rerollUtils';
-
+import { incrementStat } from '../utils/userStats';
 
 // ✅ Store restricted users in memory (temporary cache)
 const restrictedUsers = new Map<string, Set<string>>();
@@ -112,8 +112,12 @@ export async function handleMinibossCommand(
     }
 
     await minibossChannel.send({
-        content: `🎉 **Miniboss Giveaway Ended!** 🎉\n🏆 **Winners:** ${finalWinners.map(id => `<@${id}>`).join(", ")}`,
+        content: `🏆 **Winners:** ${finalWinners.map(id => `<@${id}>`).join(", ")}`,
     });
+
+    for (const winnerId of finalWinners) {
+        await incrementStat(winnerId, guild.id, 'won');
+    }
 
     await updateChannelAccess(finalWinners, true);
     await sendCommandButtons();
@@ -231,6 +235,10 @@ export async function handleMinibossCommand(
                 } catch (e) {
                     console.warn(`⚠️ Could not revoke access from ${userId}:`, e);
                 }
+            }
+
+            for (const userId of safeRestricted) {
+                await incrementStat(userId, guild.id, 'rerolled');
             }
 
             // 🧼 Cleanup

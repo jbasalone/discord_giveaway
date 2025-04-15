@@ -12,6 +12,7 @@ import { ExtraEntries } from '../models/ExtraEntries';
 import { cache } from '../utils/giveawayCache';
 import { handleMinibossCommand } from './handleMinibossCommnand';
 import { saveJoiners } from '../utils/rerollCache';
+import { incrementStat } from '../utils/userStats';
 
 
 /**
@@ -195,6 +196,10 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       if (!winnerList.includes(winner)) {
         winnerList.push(winner);
       }
+    }
+
+    for (const winnerId of winnerList) {
+      await incrementStat(winnerId, guild.id, 'won');
     }
 
     winners = winnerList.length > 0 ? winnerList.map(id => `<@${id}>`).join(", ") : "No winners.";

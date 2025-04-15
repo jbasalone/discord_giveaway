@@ -53,6 +53,7 @@ import { execute as executeRequestGiveaway } from './commands/submitGiveaway';
 import { execute as executeApproveGiveaway } from './commands/pendingGiveaways'
 import { execute as executeSetTTRoles } from './commands/setMinibossRoles'
 import { execute as executeForceEnd } from './commands/forceGiveawayEnd'
+import { execute as executeUserStats } from './commands/stats'
 
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
@@ -214,6 +215,9 @@ async function startBot() {
             break;
           case 'starttemplate': case 'start':
             await executeStartTemplate(message, args);
+            break;
+          case 'stats': case 'mystats': case 'stat':
+            await executeUserStats(message, args)
             break;
           case 'submitga': case 'submit':
             await executeRequestGiveaway(message);

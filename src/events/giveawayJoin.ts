@@ -2,6 +2,8 @@ import { ButtonInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder } from
 import { Giveaway } from '../models/Giveaway';
 import { BlacklistedRoles } from '../models/BlacklistedRoles';
 import { cache } from '../utils/giveawayCache';
+import { incrementStat } from '../utils/userStats'; // ← ensure this is at the top
+
 
 // ✅ Cooldown system (per giveaway)
 const userCooldowns = new Map<string, Map<string, number>>();
@@ -69,6 +71,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
     // ✅ **Update Participants**
     if (isJoining) {
       participants.push(userId);
+      await incrementStat(userId, guildId, 'joined');
     } else {
       participants = participants.filter(id => id !== userId);
     }
