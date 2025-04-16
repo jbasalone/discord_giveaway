@@ -1,3 +1,4 @@
+
 import {
     Client,
     Message,
@@ -5,16 +6,13 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    Interaction,
-    PermissionsBitField
+    Interaction
 } from 'discord.js';
-
 import { Giveaway } from '../models/Giveaway';
 import { GuildSettings } from '../models/GuildSettings';
 import { rerollWinnersByMessageId } from '../utils/rerollUtils';
 import { incrementStat } from '../utils/userStats';
 
-// ✅ Store restricted users in memory (temporary cache)
 const restrictedUsers = new Map<string, Set<string>>();
 
 export async function handleMinibossCommand(
@@ -23,268 +21,193 @@ export async function handleMinibossCommand(
     participants: string[],
 ) {
     giveawayId = String(giveawayId);
-    console.log(`🔍 Handling Miniboss Giveaway: ${giveawayId}`);
     let giveawayTerminated = false;
 
-    let giveaway = await Giveaway.findByPk(giveawayId);
-    if (!giveaway) {
-        console.error(`❌ Giveaway ${giveawayId} does not exist.`);
-        return;
-    }
+    const giveaway = await Giveaway.findByPk(giveawayId);
+    if (!giveaway) return console.error(`❌ Giveaway ${giveawayId} does not exist.`);
 
     const hostId = giveaway.get("host");
-    if (!hostId) {
-        console.error(`❌ Could not determine the host.`);
-        return;
-    }
-
-    const guild = client.guilds.cache.get(String(giveaway.get("guildId")));
-    if (!guild) {
-        console.error(`❌ Guild ${giveaway.get("guildId")} not found.`);
-        return;
-    }
+    const guild = await client.guilds.fetch(String(giveaway.get("guildId"))).catch(() => null);
+    if (!guild) return console.error(`❌ Guild not found.`);
 
     const channel = guild.channels.cache.get(String(giveaway.get("channelId"))) as TextChannel;
-    if (!channel) {
-        console.error(`❌ Invalid TextChannel.`);
-        return;
-    }
-
-    const guildSettings = await GuildSettings.findOne({where: {guildId: guild.id}});
-    const minibossChannelId = guildSettings?.get("minibossChannelId") as string;
-
-    if (!minibossChannelId) {
-        console.error(`❌ Miniboss channel ID missing for guild ${guild.id}`);
-        return;
-    }
+    const settings = await GuildSettings.findOne({ where: { guildId: guild.id } });
+    const minibossChannelId = settings?.get("minibossChannelId");
+    if (!minibossChannelId) return console.error(`❌ Miniboss channel ID missing for guild ${guild.id}`);
 
     const minibossChannel = guild.channels.cache.get(minibossChannelId) as TextChannel;
-    if (!minibossChannel) {
-        console.error(`❌ Miniboss channel ${minibossChannelId} does not exist.`);
-        return;
-    }
+    if (!minibossChannel) return console.error(`❌ Miniboss channel ${minibossChannelId} does not exist.`);
 
-    console.log(`📌 [DEBUG] Announcing Miniboss Winners in ${minibossChannelId}`);
+    const guaranteedWinners: string[] = JSON.parse(giveaway.get("guaranteedWinners") ?? "[]");
+    const nonHost = participants.filter(p => p !== hostId);
+    const finalWinners = [...new Set([...guaranteedWinners, ...nonHost])];
 
-    let nonHostParticipants = participants.filter(id => id !== hostId);
-    console.log(`👥 [DEBUG] Non-host Participants: ${nonHostParticipants.length} (Host Excluded)`);
-
-    // ✅ Retrieve Guaranteed Winners
-    let guaranteedWinners: string[] = JSON.parse(giveaway.get("guaranteedWinners") ?? "[]");
-    console.log(`🔒 Guaranteed Winners for Giveaway ${giveawayId}:`, guaranteedWinners);
-
-    // ✅ Merge guaranteed winners with participants, avoiding duplicates
-    let finalWinners = [...new Set([...guaranteedWinners, ...nonHostParticipants])];
-
-    async function updateChannelAccess(users: string[], grant: boolean) {
-        for (const userId of users) {
-            try {
-                await minibossChannel.permissionOverwrites.edit(userId, {
-                    ViewChannel: grant,
-                    SendMessages: grant
-                });
-                console.log(`🔑 [DEBUG] ${grant ? "Granted" : "Removed"} channel access for ${userId}`);
-            } catch (error) {
-                console.error(`❌ Error updating channel permissions for ${userId}:`, error);
-            }
+    const updateChannelAccess = async (users: string[], grant: boolean) => {
+        for (const id of users) {
+            await minibossChannel.permissionOverwrites.edit(id, {
+                ViewChannel: grant,
+                SendMessages: grant
+            }).catch(console.warn);
         }
-    }
+    };
 
-    let commandText = "";
+    const sendCommandButtons = async () => {
+        if (giveawayTerminated) return;
+        const mentions = finalWinners.map(id => `<@${id}>`).join(" ");
+        const botCmd = `<@555955826880413696> miniboss ${mentions}`;
 
-    async function sendCommandButtons() {
-        if (giveawayTerminated) return; // ✅ Avoid repeating "⚔️ Miniboss Ready!"
-        const botId = "555955826880413696";
-        const winnerMentions = finalWinners.map(id => `<@${id}>`).join(" ");
-        commandText = `<@${botId}> miniboss ${winnerMentions}`;
-
-        const initialRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`desktop-command-${giveawayId}`).setLabel("🖥️ Desktop Cmd").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`mobile-command-${giveawayId}`).setLabel("📱 Mobile Cmd").setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId(`mobile-command-${giveawayId}`).setLabel("📱 Mobile Cmd").setStyle(ButtonStyle.Primary),
         );
 
         await minibossChannel.send({
             content: `⚔️ **Miniboss Ready!** ⚔️\n<@${hostId}>, use the commands below:`,
-            components: [initialRow],
+            components: [row],
         });
 
-        console.log(`✅ [DEBUG] Stored commandText: ${commandText}`);
-    }
+        return botCmd;
+    };
 
     await minibossChannel.send({
         content: `🏆 **Winners:** ${finalWinners.map(id => `<@${id}>`).join(", ")}`,
     });
-
-    for (const winnerId of finalWinners) {
-        await incrementStat(winnerId, guild.id, 'won');
-    }
-
     await updateChannelAccess(finalWinners, true);
-    await sendCommandButtons();
+    for (const id of finalWinners) await incrementStat(id, guild.id, 'won');
 
-    const restrictionCollector = minibossChannel.createMessageCollector({
-        filter: (msg: Message) => {
-            console.log(`📌 [DEBUG] Checking message for restrictions:`, msg.content, msg.author.id);
+    const botCmd = await sendCommandButtons();
 
-            const isFromBot = msg.author.id === "555955826880413696";
-            const isCooldown = msg.embeds.length > 0 && msg.embeds[0]?.title?.toLowerCase()?.includes("fight with a boss recently");
-            const isOverCap = msg.content.toLowerCase().includes("you can't do this because") &&
-                msg.content.toLowerCase().includes("too many coins");
-            const isMinibossWin = msg.embeds.length > 0 && msg.embeds[0]?.title?.includes("HAS BEEN DEFEATED!");
-            const isEnded = msg.content.includes("Miniboss Giveaway Ended!"); // ✅ detect end message content
-
-            if (isMinibossWin || isEnded) {
-                console.log(`🏁 Miniboss marked as ended. Stopping collectors and access.`);
-                updateChannelAccess(finalWinners, false);
-                restrictionCollector.stop();
-                return false;
-            }
-            return isFromBot && (isCooldown || isOverCap);
-        },
-        time: 600000,
-    });
+    const buttonCollector = minibossChannel.createMessageComponentCollector({ time: 20 * 60 * 1000 });
+    const restrictionCollector = minibossChannel.createMessageCollector({ time: 20 * 60 * 1000 });
 
     restrictionCollector.on("collect", async (msg: Message) => {
-        console.log(`🔍 Restriction Detected! Processing action...`);
+        const isFromBot = msg.author.id === "555955826880413696";
+        const isCooldown = msg.embeds?.[0]?.title?.toLowerCase().includes("fight with a boss recently");
+        const isOverCap = msg.content.toLowerCase().includes("too many coins");
+        const isCancelled = msg.content.toLowerCase().includes("epic rpg miniboss event cancelled");
+        const isEnded = msg.content.includes("Miniboss Giveaway Ended!") ||
+            msg.embeds?.[0]?.title?.includes("HAS BEEN DEFEATED!");
 
-        let restrictedUser = null;
-        if (msg.embeds.length > 0) {
-            const embedAuthor = msg.embeds[0].author?.name || "";
-            const match = embedAuthor.match(/^(.+?) — cooldown/);
-            if (match) {
-                restrictedUser = match[1];
-            }
-        }
-        const overCapMatch = msg.content.match(/you can't do this because (.+?) would have too many coins/i);
-        if (overCapMatch) {
-            restrictedUser = overCapMatch[1];
-        }
-
-        if (!restrictedUser) return;
-
-        if (!restrictedUsers.has(giveawayId)) {
-            restrictedUsers.set(giveawayId, new Set());
-        }
-        restrictedUsers.get(giveawayId)!.add(restrictedUser);
-
-        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("⏲️ Give 1 Minute").setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
-        );
-
-        await minibossChannel.send({
-            content: `⚠️ <@${hostId}>, **${restrictedUser}** is holding us all up Choose an action:`,
-            components: [actionRow],
-        });
-    });
-
-    const buttonCollector = minibossChannel.createMessageComponentCollector({time: 300000});
-
-    buttonCollector.on("collect", async (interaction: Interaction) => {
-        if (!interaction.isButton()) return;
-        await interaction.deferUpdate();
-
-        if (interaction.customId.startsWith(`desktop-command-`) || interaction.customId.startsWith(`mobile-command-`)) {
-            if (interaction.user.id !== hostId) {
-                return interaction.followUp({
-                    content: "⛔ Only the **host** of this giveaway can use these buttons.",
-                    ephemeral: true,
-                });
-            }
-
-            await interaction.followUp({
-                content: interaction.customId.startsWith(`desktop-command-`)
-                    ? `\`\`\`${commandText}\`\`\``
-                    : `${commandText}`,
-                ephemeral: true,
+        if (isCancelled) {
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId(`desktop-command-${giveawayId}`).setLabel("🖥️ Desktop Cmd").setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`mobile-command-${giveawayId}`).setLabel("📱 Mobile Cmd").setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
+            );
+            await minibossChannel.send({
+                content: `⚠️ **The Miniboss event was cancelled.** <@${hostId}>, please choose how to proceed.`,
+                components: [row]
             });
+
+            setTimeout(async () => {
+                if (!giveawayTerminated) {
+                    await minibossChannel.send("🕒 **No action taken. Cleaning up access.**");
+                    await updateChannelAccess(finalWinners, false);
+                    restrictionCollector.stop();
+                    buttonCollector.stop();
+                }
+            }, 20 * 60 * 1000);
+        }
+
+        if (isEnded) {
+            await updateChannelAccess(finalWinners, false);
+            restrictionCollector.stop();
+            buttonCollector.stop();
             return;
         }
 
-        if (interaction.customId === `reroll-${giveawayId}`) {
-            const restrictedSet = restrictedUsers.get(giveawayId);
-            if (!restrictedSet || restrictedSet.size === 0) return;
+        if (isFromBot && (isCooldown || isOverCap)) {
+            let restrictedUser = null;
+            const embedAuthor = msg.embeds?.[0]?.author?.name || "";
+            const match = embedAuthor.match(/^(.+?) — cooldown/);
+            if (match) restrictedUser = match[1];
+            const overCapMatch = msg.content.match(/you can't do this because (.+?) would have too many coins/i);
+            if (overCapMatch) restrictedUser = overCapMatch[1];
 
-            const actualHostId = giveaway.get("host");
-            const restrictedArray = Array.from(restrictedSet);
-
-            // ❌ Filter out host from reroll list
-            const safeRestricted = restrictedArray.filter(u => u !== actualHostId);
-            if (safeRestricted.length === 0) {
-                return minibossChannel.send(`⚠️ All restricted users are the host. Cannot reroll.`);
-            }
-
-            // 🚫 Filter final winners
-            const updatedParticipants = finalWinners.filter(id => !safeRestricted.includes(id));
-            if (updatedParticipants.length < 9) {
-                return minibossChannel.send(`❌ Not enough valid participants remain after removing ${safeRestricted.length} restricted users.`);
-            }
-
-            // ✅ Execute reroll
-            const newWinners = await rerollWinnersByMessageId(client, giveaway.get("messageId"));
-            if (!newWinners.length) {
-                return minibossChannel.send(`⚠️ Reroll failed. No eligible participants.`);
-            }
-
-            await minibossChannel.send(`🔄 **New Rerolled Winners:** ${newWinners.map(id => `<@${id}>`).join(", ")}`);
-
-            // 🚪 Remove all restricted users from channel
-            for (const userId of safeRestricted) {
-                try {
-                    const member = await minibossChannel.guild.members.fetch(userId).catch(() => null);
-                    if (member) {
-                        await minibossChannel.permissionOverwrites.edit(member, {
-                            ViewChannel: false,
-                            SendMessages: false
-                        });
-                    }
-                } catch (e) {
-                    console.warn(`⚠️ Could not revoke access from ${userId}:`, e);
-                }
-            }
-
-            for (const userId of safeRestricted) {
-                await incrementStat(userId, guild.id, 'rerolled');
-            }
-
-            // 🧼 Cleanup
-            restrictedUsers.delete(giveawayId);
-            await sendCommandButtons();
-            await Giveaway.destroy({ where: { id: giveawayId } });
-            console.log(`🔁 Rerolled after removing restricted users: ${safeRestricted.join(", ")}`);
-        }
-
-        if (interaction.customId === `give-1m-${giveawayId}`) {
-            let restrictedUser = restrictedUsers.get(giveawayId);
             if (!restrictedUser) return;
 
+            if (!restrictedUsers.has(giveawayId)) restrictedUsers.set(giveawayId, new Set());
+            restrictedUsers.get(giveawayId)!.add(restrictedUser);
+
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("⏲️ Give 1 Minute").setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
+            );
+
             await minibossChannel.send({
-                content: `⏳ <@${hostId}>, **${restrictedUser}** has **1 more minute** to proceed...`,
+                content: `⚠️ <@${hostId}>, **${restrictedUser}** is stalling the event. Choose an action:`,
+                components: [row],
             });
+        }
+    });
 
-            // ✅ Start 1-minute timeout
-            setTimeout(async () => {
-                const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("⏲️ Give 1 Minute").setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
-                );
+    buttonCollector.on("collect", async (i: Interaction) => {
+        if (!i.isButton()) return;
+        await i.deferUpdate();
+        const id = i.customId;
 
-                await minibossChannel.send({
-                    content: `⏳ **Time's up!** <@${hostId}>, choose an action for **${restrictedUser}**:`,
-                    components: [actionRow],
-                });
-            }, 60000); // 60 seconds delay
+        if (id.startsWith("desktop-command-") || id.startsWith("mobile-command-")) {
+            if (i.user.id !== hostId) {
+                return i.followUp({ content: "⛔ Only the host can use these.", ephemeral: true });
+            }
+            return i.followUp({ content: id.startsWith("desktop") ? `\`\`\`${botCmd}\`\`\`` : botCmd, ephemeral: true });
         }
 
-        if (interaction.customId === `end-ga-${giveawayId}`) {
-            giveawayTerminated = true; // ✅ Stop future button reposts
-            await minibossChannel.send({ content: `❌ **Miniboss Giveaway has been canceled by the host.**` });
+        if (id === `end-ga-${giveawayId}`) {
+            giveawayTerminated = true;
+            await minibossChannel.send("❌ **Giveaway canceled by host.**");
             await updateChannelAccess(finalWinners, false);
             buttonCollector.stop();
             restrictionCollector.stop();
         }
 
+        if (id === `give-1m-${giveawayId}`) {
+            const restrictedSet = restrictedUsers.get(giveawayId);
+            if (!restrictedSet || restrictedSet.size === 0) return;
+            const firstUser = Array.from(restrictedSet)[0];
+
+            await minibossChannel.send(`⏳ <@${hostId}>, **${firstUser}** has **1 more minute** to proceed...`);
+
+            setTimeout(async () => {
+                const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    new ButtonBuilder().setCustomId(`reroll-${giveawayId}`).setLabel("🔄 Reroll").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`give-1m-${giveawayId}`).setLabel("⏲️ Give 1 Minute").setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`end-ga-${giveawayId}`).setLabel("⛔ End Giveaway").setStyle(ButtonStyle.Danger)
+                );
+                await minibossChannel.send({
+                    content: `⏳ **Time's up!** <@${hostId}>, choose an action for **${firstUser}**:`,
+                    components: [row]
+                });
+            }, 60000);
+        }
+
+        if (id === `reroll-${giveawayId}`) {
+            const restrictedSet = restrictedUsers.get(giveawayId);
+            if (!restrictedSet || restrictedSet.size === 0) return;
+            const restrictedArray = Array.from(restrictedSet).filter(u => u !== hostId);
+
+            if (restrictedArray.length === 0) return minibossChannel.send("⚠️ Cannot reroll host.");
+
+            const remaining = finalWinners.filter(id => !restrictedArray.includes(id));
+            if (remaining.length < 9) return minibossChannel.send("❌ Not enough remaining participants.");
+
+            const newWinners = await rerollWinnersByMessageId(client, giveaway.get("messageId"));
+            if (!newWinners.length) return minibossChannel.send("⚠️ Reroll failed. No eligible participants.");
+
+            await minibossChannel.send(`🔄 **New Rerolled Winners:** ${newWinners.map(id => `<@${id}>`).join(", ")}`);
+
+            for (const uid of restrictedArray) {
+                await minibossChannel.permissionOverwrites.edit(uid, {
+                    ViewChannel: false,
+                    SendMessages: false
+                }).catch(() => {});
+                await incrementStat(uid, guild.id, 'rerolled');
+            }
+
+            restrictedUsers.delete(giveawayId);
+            await sendCommandButtons();
+            await Giveaway.destroy({ where: { id: giveawayId } });
+        }
     });
 }
