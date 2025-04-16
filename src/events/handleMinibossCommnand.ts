@@ -186,6 +186,13 @@ export async function handleMinibossCommand(
         await interaction.deferUpdate();
 
         if (interaction.customId.startsWith(`desktop-command-`) || interaction.customId.startsWith(`mobile-command-`)) {
+            if (interaction.user.id !== hostId) {
+                return interaction.followUp({
+                    content: "⛔ Only the **host** of this giveaway can use these buttons.",
+                    ephemeral: true,
+                });
+            }
+
             await interaction.followUp({
                 content: interaction.customId.startsWith(`desktop-command-`)
                     ? `\`\`\`${commandText}\`\`\``
