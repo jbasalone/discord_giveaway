@@ -86,13 +86,15 @@ export async function handleHelpSelection(interaction: Interaction) {
             ],
             "basic": [
                 { name: "🚀 Basic Structure Example", value: `\`${prefix} ga create Mythic GA 20s 3 --role tt25 #channel\`` },
-                { name: "🚀 Basic Structure Example - Generic Title", value: `\`${prefix} ga create 1h 3 --role VIP\`` },
+                { name: "🚀 Basic Structure Example - Generic Title", value: `\`${prefix} ga create 1h 3 --role tt25\`` },
                 { name: "🚀 Custom Structure Example", value: `\`${prefix} ga custom Mythic GA 1h 3 --role tt25 --extraentries --field "Requirement: Level 100+"\`` },
                 { name: "Optional Flags: `[--host]`", value: `Sets a host for the giveaway, defaults to you.` },
                 { name: "Optional Flags: `[--field \"name: value\"]`", value: `Sets custom embed fields (e.g., \`req: Level 50+\`).` },
                 { name: "Optional Flags: `[--role \"rolename\"]`", value: `Pings a role when the giveaway starts.` },
                 { name: "Optional Flags: `[--extraentries]`", value: `Gives Users Extra Entries based on server config.` },
                 { name: "Optional Flags: `[--winners]`", value: `Add pre-selected winners (custom and miniboss only).` },
+                { name: "Optional Flags: `[--image]`", value: "- Allows an image in the embed as attachment or http address" },
+                { name: "Optional Flags: `[--thumbnail]`", value: "- allows a thumbnail as attachment or http address." },
                 { name: "🎉 Start a Quick Giveaway", value: `\`${prefix} ga create  <duration> <winners> --role <rolename>\`\nExample: \`${prefix} ga create Super GA 30s 1\`` },
                 { name: "🛠 Start a Custom Giveaway", value: `\`${prefix} ga custom <title> <duration> <winners> [--extraentries]\`\nExample: \`${prefix} ga custom Mythic Giveaway 1h 3\`` },
                 { name: "🔄 Reroll Winners", value: `\`${prefix} ga reroll <messageID>\`` },
@@ -113,6 +115,9 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "Optional Flags: `[--extraentries]`", value: "- Gives Users Extra Entries based on server config." },
                 { name: "Optional Flags: `[--force]`", value: "- Allows **Miniboss giveaways** to start with fewer participants." },
                 { name: "Optional Flags: `[--mine/all]`", value: "- lists only your templates or all templates." },
+                { name: "Optional Flags: `[--image]`", value: "- Allows an image in the embed as attachment or http address" },
+                { name: "Optional Flags: `[--thumbnail]`", value: "- allows a thumbnail as attachment or http address." },
+
 
             ],
             "admin": [
@@ -130,7 +135,7 @@ export async function handleHelpSelection(interaction: Interaction) {
 
             ],
             "secret": [
-                { name: "🕵 About Secret Giveaway", value: `Secret giveaways send random messages to random channels asking users to join. The first number of winners to join wins.` },
+                { name: "🕵 About Secret Giveaway", value: `[UNDER DEVELOPMENT] Secret giveaways send random messages to random channels asking users to join. The first number of winners to join wins.` },
                 { name: "🚀 Start a Secret Giveaway", value: `\`${prefix} ga secret 10 48 "Hidden giveaway message!"\`` },
                 { name: "🔄 Turn Secret Giveaway On/Off", value: `\`${prefix} ga setsecret on|off\`` },
                 { name: "⚙️ Configure Secret Giveaway Categories", value: `\`${prefix} ga setsecret on|off <channelid> <channelid>\`` },
@@ -188,7 +193,7 @@ export async function handleHelpSelection(interaction: Interaction) {
                     { label: "👑 Miniboss Commands", value: "miniboss" },
                     { label:  "⏲ Scheduling Commands", value: "scheduling"},
                     { label: "🚀 Advanced Flags & Examples", value: "flags" },
-                    { label: "🕵️ Secret Giveaway", value: "secret" },
+                    { label: "🕵️ [UNDER DEVELOPMENT] Secret Giveaway", value: "secret" },
                     { label: "🛡️ User Commands", value: "user" },
                     { label: "⚙️ Admin Commands", value: "admin" }
                 )
