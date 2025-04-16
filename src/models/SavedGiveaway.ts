@@ -15,6 +15,9 @@ export class SavedGiveaway extends Model {
     public role!: string;
     public host!: string;
     public creator!: string;
+    public imageUrl?: string;
+    public thumbnailUrl?: string;
+    public channelId?: string;
 }
 
 SavedGiveaway.init(
@@ -31,7 +34,7 @@ SavedGiveaway.init(
         name: {
             type: DataTypes.STRING,
             allowNull: false,
-            unique: "unique_saved_giveaway_name",  // ✅ Ensures only one unique constraint
+            unique: "unique_saved_giveaway_name",
         },
         title: {
             type: DataTypes.STRING,
@@ -77,6 +80,21 @@ SavedGiveaway.init(
             type: DataTypes.STRING,
             allowNull: false,
         },
+        imageUrl: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+            defaultValue: null,
+        },
+        thumbnailUrl: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+            defaultValue: null,
+        },
+        channelId: {
+            type: DataTypes.BIGINT,
+            allowNull: true,
+            defaultValue: null,
+        }
     },
     {
         sequelize,
@@ -87,7 +105,7 @@ SavedGiveaway.init(
         indexes: [
             {
                 unique: true,
-                fields: ['name'], // ✅ Explicitly set index to avoid duplicates
+                fields: ['name'],
                 name: "unique_saved_giveaway_name",
             }
         ]

@@ -12,6 +12,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     const settings = await GuildSettings.findOne({ where: { guildId } });
     const prefix = settings?.get("prefix") || "!";
 
+
     if (rawArgs.length < 3) {
         return message.reply(
             `❌ Invalid usage! Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User\n\`\`\``
@@ -33,6 +34,10 @@ export async function execute(message: Message, rawArgs: string[]) {
     let selectedRole: string | null = null;
     let hostId: string = message.author.id; // ✅ Default host is the user saving the template
     let creatorId: string = message.author.id; // ✅ Track who created the template
+    let imageUrl: string | null = null;
+    let thumbnailUrl: string | null = null;
+    let useExtraEntries = false;
+
 
     // ✅ **Ensure `--type` is properly processed**
     if (args[0] === "--type" && args[1]) {
@@ -48,6 +53,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     for (let i = 0; i < args.length; i++) {
+
         if (args[i] === "--force") {
             forceStart = true;
         } else if (args[i] === "--field" && args[i + 1]) {
@@ -69,6 +75,20 @@ export async function execute(message: Message, rawArgs: string[]) {
                 roleId = roleMatch[1]; // Extract Role ID from mention
             } else if (/^\d{17,20}$/.test(roleArg)) {
                 roleId = roleArg; // Direct Role ID input (17-20 digit number)
+            }else if (args[i] === "--image" && args[i + 1]) {
+                    const next = args[i + 1];
+                    if (next.startsWith("http")) {
+                        imageUrl = next;
+                        i++;
+                    }
+            } else if (args[i] === "--thumbnail" && args[i + 1]) {
+                    const next = args[i + 1];
+                    if (next.startsWith("http")) {
+                        thumbnailUrl = next;
+                        i++;
+                    }
+            } else if (args[i] === "--extraentries") {
+                    useExtraEntries = true;
             } else {
                 // ✅ Try to find role by **name** (case insensitive)
                 const foundRoleByName = message.guild.roles.cache.find(r => r.name.toLowerCase() === roleArg.toLowerCase());
@@ -158,7 +178,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     // ✅ Save Giveaway Template
     await SavedGiveaway.create({
         guildId: message.guild.id,
-        name: templateName,  // ✅ Properly use the name without including the creator
+        name: templateName,
         title: `🎉 ${templateName}`,
         description: `${giveawayType} giveaway template.`,
         type: giveawayType,
@@ -167,8 +187,11 @@ export async function execute(message: Message, rawArgs: string[]) {
         forceStart,
         role: selectedRole,
         host: hostId,
-        creator: creatorId,  // ✅ Track who created the template
+        creator: creatorId,
         extraFields: Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null,
+        imageUrl,
+        thumbnailUrl,
+        useExtraEntries
     });
 
 // ✅ Format the Response Message (Embed-like structure)

@@ -6,15 +6,11 @@ import { execute as startMinibossGiveaway } from '../commands/minibossGiveaway';
 import { startLiveCountdown } from '../utils/giveawayTimer';
 
 export async function execute(message: Message, rawArgs: string[], isScheduled = false) {
-
-
     if (rawArgs.length < 1) {
         return message.reply("❌ You must specify a template **ID number**.");
     }
 
     const templateId = parseInt(rawArgs[0], 10);
-    console.log("🔍 [DEBUG] [startTemplate] Template ID:", templateId);
-
     if (isNaN(templateId)) {
         return message.reply("❌ Invalid ID. Please enter a **valid template ID number**.");
     }
@@ -25,49 +21,54 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
             return message.reply(`❌ No saved giveaway template found with ID **${templateId}**.`);
         }
 
-        // ✅ Extract values safely
-        const { type, title, duration, winnerCount, role, extraFields } = savedGiveaway.get();
+        const {
+            type,
+            title,
+            duration,
+            winnerCount,
+            role,
+            extraFields,
+            host,
+            forceStart,
+            imageUrl,
+            thumbnailUrl,
+            useExtraEntries
+        } = savedGiveaway.get();
 
         let durationMs = Number(duration);
-        if (isNaN(durationMs) || durationMs <= 0) {
-            console.warn(`⚠️ [DEBUG] Invalid duration detected! Defaulting to **1 minute**.`);
-            durationMs = 60 * 1000;
-        } else if (durationMs < 1000) {
-            console.log(`✅ [DEBUG] Converting duration from seconds to milliseconds.`);
-            durationMs *= 1000;
-        }
+        if (isNaN(durationMs) || durationMs <= 0) durationMs = 60 * 1000;
 
         let parsedWinnerCount = Number(winnerCount);
-        if (isNaN(parsedWinnerCount) || parsedWinnerCount <= 0) {
-            console.warn(`⚠️ [DEBUG] Invalid winner count detected! Defaulting to 1.`);
-            parsedWinnerCount = 1;
-        }
+        if (isNaN(parsedWinnerCount) || parsedWinnerCount <= 0) parsedWinnerCount = 1;
 
         console.log(`🚀 [DEBUG] Starting ${type} Giveaway from Template ID: ${templateId}`);
 
-        let argsToPass: string[] = [
-            String(templateId),
-            String(title),
-            String(durationMs),
-            String(parsedWinnerCount)
+        const argsToPass: string[] = [
+            `"${title}"`,
+            `${Math.floor(durationMs / 1000)}s`,
+            `${parsedWinnerCount}`
         ];
 
-        // ✅ Parse Extra Fields
         const parsedExtraFields = extraFields ? JSON.parse(extraFields) : {};
         for (const [key, value] of Object.entries(parsedExtraFields)) {
             argsToPass.push("--field", `"${key}: ${value}"`);
         }
 
-        if (role && typeof role === "string") {
-            argsToPass.push("--role", role);
+        if (host) argsToPass.push("--host", `<@${host}>`);
+        if (role && role !== "None") argsToPass.push("--role", role);
+        if (imageUrl) argsToPass.push("--image", imageUrl);
+        if (thumbnailUrl) argsToPass.push("--thumbnail", thumbnailUrl);
+        if (useExtraEntries) argsToPass.push("--extraentries");
+
+        // ✅ Check for channel override at end of rawArgs
+        const lastArg = rawArgs[rawArgs.length - 1];
+        const channelMatch = lastArg?.match(/^<#(\d+)>$/);
+        if (channelMatch) {
+            argsToPass.push(lastArg); // preserve full mention format for parser
         }
 
         let giveawayEntry = null;
-
-        // ✅ If this is a scheduled giveaway, insert it into `giveaways` table first
         if (isScheduled) {
-            console.log("✅ [DEBUG] Scheduled Giveaway Detected - Inserting into `giveaways` Table.");
-
             giveawayEntry = await Giveaway.create({
                 guildId: message.guild?.id,
                 channelId: message.channel.id,
@@ -81,12 +82,11 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
                 guaranteedWinners: "[]",
                 winnerCount: parsedWinnerCount,
                 extraFields: Object.keys(parsedExtraFields).length > 0 ? JSON.stringify(parsedExtraFields) : null,
-                forceStart: Number(savedGiveaway.get("forceStart")) === 1 ? 1 : 0,
-                useExtraEntries: false,
+                forceStart: Number(forceStart) === 1 ? 1 : 0,
+                useExtraEntries: !!useExtraEntries,
+                imageUrl: imageUrl ?? null,
+                thumbnailUrl: thumbnailUrl ?? null
             });
-
-            console.log(`✅ [DEBUG] Giveaway Added to Database (ID: ${giveawayEntry.id})`);
-            console.log(`🚀 [DEBUG] Creating Giveaway with forceStart:`, savedGiveaway.get("forceStart"));
         }
 
         let giveawayMessage;
@@ -96,13 +96,11 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
             giveawayMessage = await startCustomGiveaway(message, argsToPass);
         }
 
-// ✅ If this is a scheduled giveaway, update messageId in the DB
         if (isScheduled && giveawayEntry && giveawayMessage?.id) {
             await Giveaway.update(
                 { messageId: giveawayMessage.id },
                 { where: { id: giveawayEntry.id } }
             );
-            console.log(`✅ [DEBUG] Stored message ID for scheduled giveaway: ${giveawayMessage.id}`);
         }
 
         if (isScheduled && giveawayEntry) {
