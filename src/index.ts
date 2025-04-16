@@ -55,6 +55,7 @@ import { execute as executeSetTTRoles } from './commands/setMinibossRoles'
 import { execute as executeForceEnd } from './commands/forceGiveawayEnd'
 import { execute as executeUserStats } from './commands/stats'
 import { execute as executeCancelGA } from './commands/cancelGA'
+import { execute as executeStartUp } from './commands/startupGuide'
 
 import { handleMinibossCommand } from './events/handleMinibossCommnand';
 import { executeJoinLeave } from './events/giveawayJoin';
@@ -219,6 +220,9 @@ async function startBot() {
             break;
           case 'starttemplate': case 'start':
             await executeStartTemplate(message, args);
+            break;
+          case 'startup': case 'guide':
+            await executeStartUp(message)
             break;
           case 'stats': case 'mystats': case 'stat':
             await executeUserStats(message, args)

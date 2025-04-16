@@ -23,7 +23,8 @@ export async function execute(message: Message) {
 
         const embed = new EmbedBuilder()
             .setTitle(`Giveaway Bot Help Menu`)
-            .setDescription(`Use the menu below to explore command categories. Commands are prefixed with \`${prefix}\`.`)
+            .setDescription(`Use the menu below to explore command categories. Commands are prefixed with \`${prefix}\`. 
+            \n🚀New to GA Bot? use \`${prefix} ga startup\` for a quick guide`)
             .setColor("Blue");
 
         const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
