@@ -1,90 +1,95 @@
-import { EmbedBuilder, TextChannel, Client, Message } from 'discord.js';
+import {
+    EmbedBuilder,
+    TextChannel,
+    Client,
+    Message,
+    EmbedField
+} from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { handleGiveawayEnd } from '../events/giveawayEnd';
+
+// ✅ Patch fields by name, preserving order and all other fields
+function patchFields(
+    existing: EmbedField[] = [],
+    updates: EmbedField[]
+): EmbedField[] {
+    const updateMap = new Map(updates.map(f => [f.name, f]));
+    const seen = new Set<string>();
+    const result: EmbedField[] = [];
+
+    for (const field of existing) {
+        if (updateMap.has(field.name)) {
+            result.push(updateMap.get(field.name)!);
+            seen.add(field.name);
+        } else {
+            result.push({
+                name: field.name,
+                value: field.value,
+                inline: field.inline ?? false
+            });
+        }
+    }
+
+    // Append any update fields not already present
+    for (const field of updates) {
+        if (!seen.has(field.name)) {
+            result.push(field);
+        }
+    }
+
+    return result;
+}
 
 export async function startLiveCountdown(giveawayId: number, client: Client) {
     try {
         const giveaway = await Giveaway.findByPk(giveawayId);
-        if (!giveaway) {
-            console.warn(`[ERROR] [giveawayTimer.ts] ⚠️ Giveaway not found for ID ${giveawayId}. Skipping countdown.`);
-            return;
-        }
+        if (!giveaway) return console.warn(`[Timer] ❌ Giveaway ${giveawayId} not found.`);
 
         const channel = client.channels.cache.get(giveaway.get("channelId")) as TextChannel;
-        if (!channel) {
-            console.warn(`⚠️ Channel not found for Giveaway ID ${giveawayId}.`);
-            return;
-        }
+        if (!channel) return console.warn(`[Timer] ❌ Channel not found for ${giveawayId}.`);
 
         const messageId = giveaway.get("messageId");
-        if (!messageId || messageId === "PENDING") {
-            console.warn(`⚠️ Giveaway ${giveawayId} has an invalid messageId: ${messageId}. Skipping update.`);
-            return;
-        }
+        if (!messageId || messageId === "PENDING") return;
 
-        let updatedMessage: Message | null = null;
-        try {
-            updatedMessage = await channel.messages.fetch(messageId);
-        } catch (error) {
-            console.error(`[ERROR] ❌ Could not fetch giveaway message ${messageId}. Skipping update.`);
-            return;
-        }
-
-        const currentTime = Math.floor(Date.now() / 1000);
-        const endsAt = giveaway.get("endsAt");
-        const timeLeft = endsAt - currentTime;
-
-        const embed = EmbedBuilder.from(updatedMessage.embeds[0] || new EmbedBuilder().setTitle("Giveaway").setColor("Blue"));
+        const giveawayMessage = await channel.messages.fetch(messageId).catch(() => null);
+        if (!giveawayMessage) return;
 
         const participants: string[] = JSON.parse(giveaway.get("participants") || "[]");
+        const endsAt = giveaway.get("endsAt");
+        const now = Math.floor(Date.now() / 1000);
+        const timeLeft = endsAt - now;
 
-        const currentFields = embed.data.fields ?? [];
+        const embed = EmbedBuilder.from(giveawayMessage.embeds[0] || new EmbedBuilder().setColor("Blue"));
+        const countdownFields: EmbedField[] = [
+            { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
+            { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true }
+        ];
 
-        // ✅ Clean + update the fields
-        const updatedFields = currentFields
-            .filter(f => !["⏳ Ends In", "🎟️ Total Participants"].includes(f.name))
-            .concat([
-                { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-                { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true }
-            ]);
+        embed.setFields(...patchFields(embed.data.fields as EmbedField[] ?? [], countdownFields));
+        await giveawayMessage.edit({ embeds: [embed] });
 
-        embed.setFields(...updatedFields);
-        await updatedMessage.edit({ embeds: [embed] });
-
-        // ✅ Ended condition
+        // ✅ Giveaway has ended
         if (timeLeft <= 0) {
-            const exists = await Giveaway.findOne({ where: { id: giveawayId } });
-            if (!exists) {
-                console.warn(`⚠️ Giveaway ${giveawayId} already ended and removed.`);
-                return;
-            }
+            console.log(`⏰ [Timer] Ending Giveaway ${giveawayId}...`);
 
-            console.log(`✅ Giveaway ${giveawayId} has ended. Freezing embed and processing...`);
-
-            const embed = EmbedBuilder.from(updatedMessage.embeds[0] || new EmbedBuilder().setTitle("Giveaway").setColor("Red"));
-
-            const frozenFields = (embed.data.fields ?? []).filter(
-                f => !["⏳ Ends In", "🎟️ Total Participants"].includes(f.name)
-            ).concat([
+            const finalEmbed = EmbedBuilder.from(embed).setColor("Red");
+            const freezeFields: EmbedField[] = [
                 { name: "⏳ Ends In", value: ":warning: Ended!", inline: true },
                 { name: "🎟️ Total Participants", value: `${participants.length} users`, inline: true }
-            ]);
+            ];
 
-            embed.setFields(...frozenFields);
-            await updatedMessage.edit({ embeds: [embed] });
+            finalEmbed.setFields(...patchFields(finalEmbed.data.fields as EmbedField[] ?? [], freezeFields));
+            await giveawayMessage.edit({ embeds: [finalEmbed] });
 
-            // ✅ Call the official end processor
             await handleGiveawayEnd(client, giveawayId);
-
             return;
         }
 
         if (await Giveaway.findByPk(giveawayId)) {
-            const nextUpdate = Math.min(5000, timeLeft * 1000);
-            setTimeout(() => startLiveCountdown(giveawayId, client), nextUpdate);
+            setTimeout(() => startLiveCountdown(giveawayId, client), Math.min(5000, timeLeft * 1000));
         }
 
-    } catch (error) {
-        console.error("❌ Critical Error in `startLiveCountdown()`:", error);
+    } catch (err) {
+        console.error("❌ [Timer] startLiveCountdown() error:", err);
     }
 }

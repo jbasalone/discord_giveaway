@@ -8,265 +8,236 @@ import {
     User
 } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
-import { SavedGiveaway } from '../models/SavedGiveaway';
 import { GuildSettings } from '../models/GuildSettings';
-import { convertToMilliseconds } from '../utils/convertTime';
-import { startLiveCountdown } from '../utils/giveawayTimer';
 import { AllowedGiveawayChannels } from "../models/AllowedGiveawayChannels";
+import { startLiveCountdown } from '../utils/giveawayTimer';
 import { client } from '../index';
 
 /**
- * Removes surrounding quotes from a string.
+ * Remove leading/trailing quotes.
  */
 function sanitizeArg(arg: string | undefined): string {
     return arg ? arg.replace(/^"|"$/g, '').trim() : '';
 }
 
 export async function execute(message: Message, rawArgs: string[]) {
-    if (!message.guild) {
-        return message.reply("❌ This command must be used inside a server.");
-    }
+    if (!message.guild) return message.reply("❌ This command must be used inside a server.");
 
     const guildId = message.guild.id;
     const guildSettings = await GuildSettings.findOne({ where: { guildId } });
     const prefix = guildSettings?.get("prefix") || "!";
-    const argMatches = rawArgs.join(" ").match(/"([^"]+)"|[^\s]+/g) || [];
-    const parsedArgs = argMatches.map(arg => arg.replace(/^"|"$/g, '').trim());
+    const parsedArgs = (rawArgs.join(" ").match(/"([^"]+)"|[^\s]+/g) || []).map(arg => arg.replace(/^"|"$/g, '').trim());
     let remainingArgs = [...parsedArgs];
 
-    if (!guildSettings) {
-        return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
-    }
+    if (!guildSettings) return message.reply("❌ Guild settings not found. Admins need to configure roles first.");
 
-    let allowedRoles: string[] = [];
-    try {
-        allowedRoles = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
-    } catch {
-        allowedRoles = [];
-    }
-
-    if (allowedRoles.length > 0 && message.member) {
-        const isScheduled = message.author.id === client.user?.id; // Bot started it
-
-        if (!isScheduled && !message.member.roles.cache.some(role => allowedRoles.includes(role.id))) {
-            console.log("[ERROR] [CUSTOMGIVEAWAY.ts] ❌ You do not have permission to start giveaways.", [allowedRoles]);
-            return message.reply("❌ You do not have permission to start giveaways.");
-        }
+    const allowedRoles: string[] = JSON.parse(guildSettings.get("allowedRoles") ?? "[]");
+    if (allowedRoles.length > 0 && message.member && !message.member.roles.cache.some(role => allowedRoles.includes(role.id))) {
+        return message.reply("❌ You do not have permission to start giveaways.");
     }
 
     const allowedChannel = await AllowedGiveawayChannels.findOne({ where: { guildId, channelId: message.channel.id } });
-
     if (!allowedChannel) {
-        return message.reply("[ERROR] [CUSTOMGIVEAWAY.ts] ❌ Giveaways can only be started in **approved channels**. Ask an admin to configure this.");
+        return message.reply("❌ Giveaways can only be started in approved channels.");
     }
 
-    console.log("🔍 [DEBUG][CUSTOMGIVEAWAY.ts] Raw Args:", rawArgs);
     let targetChannel: TextChannel = message.channel as TextChannel;
-
     const lastArg = rawArgs[rawArgs.length - 1];
-    const match = lastArg?.match(/^<#(\d+)>$/); // Discord channel mention format
-
+    const match = lastArg?.match(/^<#(\d+)>$/);
     if (match) {
         const channelId = match[1];
         const found = message.guild.channels.cache.get(channelId);
         if (found?.isTextBased()) {
             targetChannel = found as TextChannel;
-            rawArgs.pop(); // remove channel mention from args
-            console.log(`✅ [DEBUG] Using target channel override: ${channelId}`);
+            rawArgs.pop(); // Remove channel mention
         }
     }
 
-    // ✅ **Check if the first argument is a valid template ID**
-    let templateId: number | null = null;
-    if (!isNaN(parseInt(rawArgs[0], 10))) {
-        rawArgs.shift(); // Remove numeric template ID if present
-    }
-    let savedGiveaway: SavedGiveaway | null = null;
-    // ✅ Extract title properly until first valid duration format
-    let titleParts: string[] = [];
-    let durationIndex = rawArgs.findIndex(arg => /^\d+$/.test(arg) || arg.match(/^\d+(s|m|h|d)$/));
-
+    const durationIndex = rawArgs.findIndex(arg => /^\d+$/.test(arg) || /^\d+[smhd]$/.test(arg));
     if (durationIndex === -1) {
-        return message.reply("❌ Missing a valid duration. Example: `30m`, `1h`, `2d`.");
+        return message.reply("❌ Missing valid duration. Use formats like `30m`, `1h`, etc.");
     }
 
-// ✅ Title consists of everything before the first valid duration
-    titleParts = rawArgs.splice(0, durationIndex);
-    let title = titleParts.join(" ").trim();
-    if (!title || title.match(/^\d+(s|m|h|d)$/)) {
-        return message.reply(`❌ Invalid title. Example:\n\`\`\`\n ${prefix} ga custom \"Super Giveaway\" 30m 1 --field \"Requirement: Level 50+\" --role VIP\n\`\`\``);
+    const title = sanitizeArg(rawArgs.slice(0, durationIndex).join(" ").trim());
+    if (!title || /^\d+[smhd]$/.test(title)) {
+        return message.reply(`❌ Invalid title.\nExample:\n\`\`\`${prefix} ga custom "Epic Giveaway" 30m 1 --field "Requirement: Level 20"\`\`\``);
     }
 
-    if (title.length === 0) {
-        return message.reply(
-            `❌ Missing title. Example:\n\`\`\`\n ${prefix} ga custom \"Super Giveaway\" 30m 1 --field \"Requirement: Level 50+\" --role VIP\n\`\`\``
-        );
-    }
-
-// ✅ Extract duration & winner count properly
-    let durationStr = rawArgs.shift()!;
-    let winnerCountStr = rawArgs.shift()!;
+    rawArgs.splice(0, durationIndex);
+    const durationStr = sanitizeArg(rawArgs.shift());
+    const winnerCountStr = sanitizeArg(rawArgs.shift());
     let winnerCount = parseInt(winnerCountStr, 10);
-
-    if (isNaN(winnerCount) || winnerCount <= 0) {
-        console.warn(`⚠️ [DEBUG] Invalid winner count (${winnerCountStr}) detected! Defaulting to 1.`);
-        winnerCount = 1;
-    }
+    if (isNaN(winnerCount) || winnerCount <= 0) winnerCount = 1;
 
     let durationMs = 0;
+    if (/^\d+$/.test(durationStr)) durationMs = parseInt(durationStr);
+    else if (/^\d+s$/.test(durationStr)) durationMs = parseInt(durationStr) * 1000;
+    else if (/^\d+m$/.test(durationStr)) durationMs = parseInt(durationStr) * 60 * 1000;
+    else if (/^\d+h$/.test(durationStr)) durationMs = parseInt(durationStr) * 60 * 60 * 1000;
+    else if (/^\d+d$/.test(durationStr)) durationMs = parseInt(durationStr) * 24 * 60 * 60 * 1000;
+    else return message.reply(`❌ Invalid duration format: "${durationStr}". Example: \`30m\`, \`1h\`, \`2d\`.`);
 
-// ✅ If duration is numeric (milliseconds), use it directly
-    if (!isNaN(durationMs) && durationMs >= 1000) {
-        console.log(`✅ [DEBUG] Numeric duration detected: ${durationMs}ms`);
+    const options = {
+        roleId: null as string | null,
+        hostId: message.author.id,
+        extraFields: {} as Record<string, string>,
+        useExtraEntries: false,
+        imageUrl: null as string | null,
+        thumbnailUrl: null as string | null
+
+    };
+
+    let i = 0;
+    while (i < rawArgs.length) {
+        const arg = sanitizeArg(rawArgs[i]);
+
+        if (arg === '--role') {
+            const next = sanitizeArg(rawArgs[i + 1]);
+            if (next && !next.match(/^\d+[smhd]?$/)) {
+                options.roleId = next;
+                i += 2;
+                continue;
+            }
+        } else if (arg === '--host') {
+            const next = sanitizeArg(rawArgs[i + 1]);
+            const mentionMatch = next?.match(/^<@!?(\d+)>$/);
+            options.hostId = mentionMatch ? mentionMatch[1] : next;
+            i += 2;
+            continue;
+        } else if (arg === '--field') {
+            i++;
+            let fieldRaw = '';
+
+            // Collect all parts of the field until we hit another flag or end
+            while (i < rawArgs.length && !rawArgs[i].startsWith('--')) {
+                fieldRaw += (fieldRaw ? ' ' : '') + sanitizeArg(rawArgs[i]);
+                i++;
+            }
+
+            fieldRaw = fieldRaw.trim();
+            if (!fieldRaw.includes(":")) {
+                return message.reply("❌ Invalid `--field` format. Use `--field \"Key: Value\"`");
+            }
+
+            const [key, ...valParts] = fieldRaw.split(":");
+            const keyStr = key.trim();
+            const valStr = valParts.join(":").trim();
+            if (keyStr && valStr) {
+                options.extraFields[keyStr] = valStr;
+            }
+            continue;
+        } else if (arg === '--extraentries') {
+            options.useExtraEntries = true;
+            i++;
+            continue;
+        }else if (arg === '--image') {
+                const next = sanitizeArg(rawArgs[i + 1]);
+                if (next?.startsWith("http")) {
+                    options.imageUrl = next;
+                    i += 2;
+                    continue;
+                }
+            }
+
+            else if (arg === '--thumbnail') {
+                const next = sanitizeArg(rawArgs[i + 1]);
+                if (next?.startsWith("http")) {
+                    options.thumbnailUrl = next;
+                    i += 2;
+                    continue;
+                }
+            }
+
+        i++;
     }
-// ✅ Otherwise, try parsing it as a human-readable format (e.g., "30m")
-    if (/^\d+$/.test(durationStr) && Number(durationStr) >= 1000) {
-        durationMs = Number(durationStr); // Directly use millisecond values
-        console.log(`✅ [DEBUG] Numeric duration detected: ${durationMs}ms`);
-    } else if (/^\d+s$/.test(durationStr)) {
-        durationMs = parseInt(durationStr) * 1000;
-    } else if (/^\d+m$/.test(durationStr)) {
-        durationMs = parseInt(durationStr) * 60 * 1000;
-    } else if (/^\d+h$/.test(durationStr)) {
-        durationMs = parseInt(durationStr) * 60 * 60 * 1000;
-    } else if (/^\d+d$/.test(durationStr)) {
-        durationMs = parseInt(durationStr) * 24 * 60 * 60 * 1000;
-    } else {
-        return message.reply(`❌ Invalid duration format: "${durationStr}". Example: \`30m\`, \`1h\`, \`2d\`.`);
-    }
+    // ✅ Infer attachment **only if no URL already set**
+    if (message.attachments.size > 0) {
+        const imageAttachment = message.attachments.find(att => att.contentType?.startsWith("image"));
+        if (imageAttachment) {
+            const argsStr = rawArgs.map(arg => arg.toLowerCase()).join(" ");
 
-    console.log(`📌 [DEBUG] Parsed Duration (ms): ${durationMs}`);
-
-// ✅ Extract additional fields & options
-    let extraFields: Record<string, string> = {};
-    let roleId: string | null = null;
-    let hostId: string = message.author.id;
-    let useExtraEntries = false;
-
-    while (rawArgs.length > 0) {
-        const arg = sanitizeArg(rawArgs.shift());
-
-        if (arg === "--role" && rawArgs.length > 0) {
-            let nextArg = sanitizeArg(rawArgs.shift());
-            if (!nextArg.match(/^\d+(s|m|h|d)$/)) { // Ensure it's not a duration
-                roleId = nextArg;
-            }
-        } else if (arg === "--host" && rawArgs.length > 0) {
-            const mentionMatch = rawArgs[0]?.match(/^<@!?(\d+)>$/);
-            hostId = mentionMatch ? mentionMatch[1] : sanitizeArg(rawArgs.shift());
-        } else if (arg === "--field" && rawArgs.length > 0) {
-            let fieldDataParts: string[] = [];
-
-            // ✅ Collect all parts of the field (including spaces)
-            while (rawArgs.length > 0) {
-                let part = rawArgs.shift()!;
-                fieldDataParts.push(part);
-                if (part.endsWith('"')) break; // Stop at the closing quote
+            if (argsStr.includes('--thumbnail') && !argsStr.includes('--image')) {
+                options.thumbnailUrl = imageAttachment.url;
+            } else if (argsStr.includes('--image') && !argsStr.includes('--thumbnail')) {
+                options.imageUrl = imageAttachment.url;
+            } else if (!argsStr.includes('--thumbnail') && !argsStr.includes('--image')) {
+                options.imageUrl = imageAttachment.url; // default fallback
             }
 
-            let fieldData = fieldDataParts.join(" ").replace(/^"|"$/g, '').trim();
-
-            // ✅ Ensure fieldData contains a `:`
-            if (!fieldData.includes(":")) {
-                return message.reply("❌ Invalid field format. Example: `--field \"Requirement: Level 50+\"`.");
+            // ❌ Explicitly prevent both being set by default
+            if (argsStr.includes('--image') && argsStr.includes('--thumbnail')) {
+                return message.reply("❌ Cannot use both `--image` and `--thumbnail` with a single upload. Please use separate URLs.");
             }
-
-            let [key, ...valueParts] = fieldData.split(":");
-            extraFields[key.trim()] = valueParts.join(":").trim();
-        } else if (arg === "--extraentries") {
-            useExtraEntries = true;
         }
     }
-    console.log(`✅ [DEBUG] Parsed Extra Fields:`, extraFields);
 
     const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
-    const channel = targetChannel;
-    let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
-    console.log(`✅ [DEBUG] Final Parsed Values -> Title: "${title}", Duration: "${durationMs}ms", Winner Count: "${winnerCount}"`);
-
+    const hostId = options.hostId;
+    const extraFields = options.extraFields;
+    const useExtraEntries = options.useExtraEntries;
+    const defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
 
     let rolePings: string[] = [];
-    let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
-
-// ✅ Resolve role name from roleMappings
+    let roleId = options.roleId;
+    const roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
     if (roleId && roleMappings.hasOwnProperty(roleId)) {
         roleId = roleMappings[roleId];
     }
 
-// ✅ Allow multiple role IDs if comma-separated
-    let roleList = roleId ? roleId.split(",") : [];
-    for (let id of roleList) {
+    const roleList = roleId ? roleId.split(",") : [];
+    for (const id of roleList) {
         if (message.guild.roles.cache.has(id)) {
             rolePings.push(`<@&${id}>`);
         } else {
-            return message.reply(`❌ The role ID **${id}** is invalid or does not exist.`);
+            return message.reply(`❌ The role ID **${id}** is invalid.`);
         }
     }
 
-// ✅ If no role is specified, fallback to the default giveaway role
     if (rolePings.length === 0 && defaultRole && message.guild.roles.cache.has(defaultRole)) {
         rolePings.push(`<@&${defaultRole}>`);
     }
 
-// ✅ If no valid roles exist, prevent the giveaway
     if (rolePings.length === 0) {
-        return message.reply("❌ No valid roles were provided. Use the role name (ex: `--role tt25`) or a valid role ID.");
+        return message.reply("❌ No valid roles. Use `--role VIP` or set a default role.");
     }
 
-// ✅ Final role ping string
-    let rolePing = rolePings.join(" ");
-    console.log(`✅ [DEBUG] Resolved Role Pings: ${rolePing}`);
-    console.log(`✅ [DEBUG] RoleMappings:`, roleMappings);
-    console.log(`✅ [DEBUG] Role ID before mapping: ${roleId}`);
-
-    let hostUser: User | null = null;
-    try {
-        hostUser = await client.users.fetch(hostId);
-    } catch (error) {
-        console.error("❌ Failed to fetch host user:", error);
-    }
-
+    const rolePing = rolePings.join(" ");
+    const hostUser: User = await client.users.fetch(hostId).catch(() => message.author);
     const hostMention = hostUser ? `<@${hostUser.id}>` : `<@${message.author.id}>`;
 
-    // ✅ **Create Embed**
     const embed = new EmbedBuilder()
-        .setTitle(`🚀 **${title}** `)
+        .setTitle(`🚀 **${title}**`)
         .setDescription(`**Host:** ${hostMention}\n**Server:** ${message.guild?.name}`)
-        .setColor("Blue")
-        .setFields([
-            { name: "🎟️ Total Participants", value: "0 users", inline: true },
-            { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
-            { name: "🏆 Winners", value: `${winnerCount}`, inline: true },
-            ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value, inline: true }))
-        ]);
+        .setColor("Blue");
+
+    if (options.imageUrl) embed.setImage(options.imageUrl);
+    if (options.thumbnailUrl) embed.setThumbnail(options.thumbnailUrl);
+
+    embed.setFields([
+        { name: "🎟️ Total Participants", value: "0 users", inline: true },
+        { name: "⏳ Ends In", value: `<t:${endsAt}:R>`, inline: true },
+        { name: "🏆 Winners", value: `${winnerCount}`, inline: true },
+        ...Object.entries(extraFields).map(([key, value]) => ({ name: key, value, inline: true }))
+    ]);
 
     if (useExtraEntries) {
         embed.addFields([{ name: "✨ Extra Entries Enabled", value: "✅ Yes", inline: true }]);
     }
 
-    let giveawayMessage = await channel.send({ content: rolePing, embeds: [embed] });
 
-    // ✅ **Create "Join" and "Leave" Buttons**
+    const giveawayMessage = await targetChannel.send({ content: rolePing, embeds: [embed] });
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`join-${giveawayMessage.id}`)
-            .setLabel("Join 🎉")
-            .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-            .setCustomId(`leave-${giveawayMessage.id}`)
-            .setLabel("Leave 💨")
-            .setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🎉").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave 💨").setStyle(ButtonStyle.Danger)
     );
 
     await giveawayMessage.edit({ components: [row] });
 
-
-    // ✅ **Create Giveaway Entry in Database**
-    let giveawayData = await Giveaway.create({
+    const giveawayData = await Giveaway.create({
         guildId,
         host: hostUser?.id ?? message.author.id,
         userId: message.author.id,
-        channelId: channel.id,
+        channelId: targetChannel.id,
         messageId: giveawayMessage.id,
         title,
         description: `**Host:** ${hostMention}\n**Server:** ${message.guild?.name}`,
@@ -281,16 +252,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         useExtraEntries
     });
 
-    if (!giveawayMessage.id) {
-        console.error(`[ERROR] [customGiveaway.ts] ❌ Failed to send giveaway message. Skipping.`);
-        return;
-    }
-
-    await Giveaway.update(
-        { messageId: giveawayMessage.id },
-        { where: { id: giveawayData.id } }
-    );
-
+    await Giveaway.update({ messageId: giveawayMessage.id }, { where: { id: giveawayData.id } });
     startLiveCountdown(giveawayData.id, message.client);
 
     return message.reply(`🎉 **${title}** started! Hosted by ${hostMention}.`);
