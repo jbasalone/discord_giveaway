@@ -12,8 +12,26 @@ export async function execute(message: Message, guildId?: string) {
     return message.reply("❌ This command must be used inside a server.");
   }
 
-  if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    return message.reply("❌ You need **Administrator** permissions to view the guild configuration.");
+  const guildIdResolved = guildId || message.guild.id;
+  const settings = await GuildSettings.findOne({ where: { guildId: guildIdResolved } });
+
+  if (!settings) {
+    return message.reply("❌ No settings found for this server.");
+  }
+
+  const allowedRolesRaw = settings.get("allowedRoles") ?? "[]";
+  let allowedRoles: string[];
+
+  try {
+    allowedRoles = JSON.parse(allowedRolesRaw);
+  } catch {
+    allowedRoles = [];
+  }
+
+  const hasAccess = message.member?.roles.cache.some(role => allowedRoles.includes(role.id));
+
+  if (!hasAccess) {
+    return message.reply("❌ You do not have permission to view this configuration.");
   }
 
   guildId = guildId || message.guild.id;

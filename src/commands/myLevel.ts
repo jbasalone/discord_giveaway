@@ -21,7 +21,7 @@ export async function execute(message: Message) {
                 { name: "🔹 User Level", value: `**${userLevel}**`, inline: true },
                 { name: "🌌 TT Level", value: `**${ttLevel}**`, inline: true }
             )
-            .setFooter({ text: "Use `!setlevel <level> [tt_level]` to update your stats." });
+            .setFooter({ text: "Use `<prefix ga setlevel <level> [tt_level]` to update your stats." });
 
         return message.reply({ embeds: [embed] });
 

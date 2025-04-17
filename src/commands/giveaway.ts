@@ -192,7 +192,12 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     if (rolePings.length === 0) {
-        return message.reply("❌ No valid roles were provided. use the role name 'ex: --role tt25 or roleID'\n roll names can be found in 'ga config'.");
+        if (defaultRole && message.guild.roles.cache.has(defaultRole)) {
+            rolePings.push(`<@&${defaultRole}>`);
+            console.log("✅ [DEBUG] Using defaultGiveawayRoleId as fallback role.");
+        } else {
+            return message.reply("❌ No valid roles were provided, and no default role is set in server config. Use `--role VIP` or ask an admin to configure one.");
+        }
     }
 
 // ✅ Join all role pings into one string

@@ -255,7 +255,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     await Giveaway.update({ messageId: giveawayMessage.id }, { where: { id: giveawayData.id } });
     startLiveCountdown(giveawayData.id, message.client);
 
-    return message.reply(`🎉 **${title}** started! Hosted by ${hostMention}.`);
-}
+    const reply = await message.reply(`🎉 **${title}** started! Hosted by ${hostMention}.`);
+    setTimeout(() => reply.delete().catch(() => null), 10_000);}
 
 export { execute as startCustomGiveaway };
