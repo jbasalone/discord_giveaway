@@ -98,9 +98,11 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "🎉 Start a Quick Giveaway", value: `\`${prefix} ga create  <duration> <winners> --role <rolename>\`\nExample: \`${prefix} ga create Super GA 30s 1\`` },
                 { name: "🛠 Start a Custom Giveaway", value: `\`${prefix} ga custom <title> <duration> <winners> [--extraentries]\`\nExample: \`${prefix} ga custom Mythic Giveaway 1h 3\`` },
                 { name: "🔄 Reroll Winners", value: `\`${prefix} ga reroll <messageID>\`` },
-                { name: "❌ Delete an Active Giveaway", value: `\`${prefix} ga delete <messageID>\`` },
+                { name: "❌ Cancel an Active Giveaway", value: `\`${prefix} ga cancel <messageID>\`` },
                 { name: "🔍 Check Giveaway Status", value: `\`${prefix} ga check <messageID> | all\`` },
                 { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listga\`` },
+                { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listga\`` },
+
             ],
             "template": [
                 { name: "💾 Save a Giveaway Template", value: `\`${prefix} ga save --type <custom|miniboss> <name> <duration> [winners]\`` },

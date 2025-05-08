@@ -242,8 +242,6 @@ async function startBot() {
       }
     });
 
-
-
     client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isModalSubmit()) return;
 
@@ -256,10 +254,30 @@ async function startBot() {
           }
         } else if (interaction.isModalSubmit() && interaction.customId.startsWith("edit-template-modal-")) {
           await handleModal(interaction);
+
         } else if (interaction.isButton()) {
-          if (interaction.customId.startsWith("preview-") || interaction.customId.startsWith("save-") || interaction.customId.startsWith("exit-")) {
-            await handleButton(interaction); // ✅ Handle Save & Exit or Preview buttons
-          } else if (interaction.customId.startsWith("miniboss-")) {
+
+          // ✅ Miniboss and other known exclusions
+          if (interaction.customId.startsWith("mblist:")) {
+            console.log("✅ Giveaway bot ignored mblist button:", interaction.customId);
+            return;
+          }
+
+          // ✅ Giveaway-specific buttons only
+          if (/^gw(join|leave)-\d+$/.test(interaction.customId)) {
+            await executeJoinLeave(interaction);
+            return;
+          }
+
+          // ✅ Secret/miniboss/edit buttons handled separately
+          if (interaction.customId.startsWith("preview-") ||
+              interaction.customId.startsWith("save-") ||
+              interaction.customId.startsWith("exit-")) {
+            await handleButton(interaction);
+            return;
+          }
+
+          if (interaction.customId.startsWith("miniboss-")) {
             const giveawayId = interaction.customId.split("-").pop();
             if (!giveawayId) {
               return interaction.reply({ content: "❌ Invalid Miniboss Giveaway ID.", ephemeral: true });
@@ -273,15 +291,23 @@ async function startBot() {
             const participants = JSON.parse(giveaway.get("participants") ?? "[]");
             console.log(`🔍 Calling handleMinibossCommand (Participants: ${participants.length})`);
             await handleMinibossCommand(client, parseInt(giveawayId), participants);
-          } else if (interaction.customId.startsWith("secret-")) {
-            await handleSecretGiveawayButton(interaction);
-          } else {
-            await executeJoinLeave(interaction);
+            return;
           }
+
+          if (interaction.customId.startsWith("secret-")) {
+            await handleSecretGiveawayButton(interaction);
+            return;
+          }
+
+          // ⏭️ Skip all unknown buttons silently (Parkman compatibility)
+          console.log("⏭️ Skipped unrelated button interaction:", interaction.customId);
+          return;
         }
       } catch (error) {
         console.error("❌ Error handling interaction:", error);
-        await interaction.reply({ content: "❌ An error occurred.", flags: MessageFlags.SuppressEmbeds });
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: "❌ An error occurred.", flags: MessageFlags.SuppressEmbeds });
+        }
       }
     });
 

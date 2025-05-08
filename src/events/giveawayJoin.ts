@@ -1,29 +1,40 @@
-import { ButtonInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import {
+  ButtonInteraction,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+} from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 import { BlacklistedRoles } from '../models/BlacklistedRoles';
 import { cache } from '../utils/giveawayCache';
-import { incrementStat } from '../utils/userStats'; // ← ensure this is at the top
+import { incrementStat } from '../utils/userStats';
 
-
-// ✅ Cooldown system (per giveaway)
 const userCooldowns = new Map<string, Map<string, number>>();
-const cooldownTime = 5 * 1000;
+const cooldownTime = 5000; // 5 seconds
 
 export async function executeJoinLeave(interaction: ButtonInteraction) {
   try {
-    if (!interaction.customId.startsWith('join-') && !interaction.customId.startsWith('leave-')) return;
+    const giveawayPrefixRegex = /^(gwjoin|gwleave)-\d+$/;
+    console.log(`📩 Handling giveaway interaction: ${interaction.customId}`);
 
-    const isJoining = interaction.customId.startsWith('join-');
+    if (!giveawayPrefixRegex.test(interaction.customId)) {
+      console.log(`⛔ Ignored unrelated button: ${interaction.customId}`);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.deferUpdate().catch(() => {});
+      }
+      return;
+    }
+
+    const isJoining = interaction.customId.startsWith('gwjoin-');
     const userId = interaction.user.id;
     const guildId = interaction.guild?.id;
     const giveawayMessageId = interaction.customId.split('-')[1];
 
     if (!guildId) {
-      return await interaction.reply({ content: '❌ An error occurred. Guild ID missing.', ephemeral: true });
+      return await interaction.reply({ content: '❌ Guild ID missing.', ephemeral: true });
     }
 
     let giveaway = await Giveaway.findOne({ where: { messageId: giveawayMessageId } });
-
     if (!giveaway) {
       console.warn(`⚠️ Giveaway ${giveawayMessageId} not found in DB, checking cache...`);
       giveaway = cache.get(giveawayMessageId) ?? null;
@@ -33,7 +44,7 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       return await interaction.reply({ content: '❌ This giveaway has ended or is corrupted.', ephemeral: true });
     }
 
-    const endsAt: number = giveaway.get('endsAt');
+    const endsAt = giveaway.get('endsAt');
     const currentTime = Math.floor(Date.now() / 1000);
     if (endsAt <= currentTime) {
       return await interaction.reply({ content: '❌ This giveaway has already ended!', ephemeral: true });
@@ -42,11 +53,11 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
     let participants: string[] = JSON.parse(giveaway.get('participants') || '[]');
     const alreadyJoined = participants.includes(userId);
 
-    // ✅ **Per-Giveaway Cooldown Check**
     if (!userCooldowns.has(userId)) userCooldowns.set(userId, new Map());
     const userGiveawayCooldowns = userCooldowns.get(userId)!;
 
-    if (userGiveawayCooldowns.has(giveawayMessageId) && Date.now() - userGiveawayCooldowns.get(giveawayMessageId)! < cooldownTime) {
+    if (userGiveawayCooldowns.has(giveawayMessageId) &&
+        Date.now() - userGiveawayCooldowns.get(giveawayMessageId)! < cooldownTime) {
       return await interaction.reply({ content: '⚠️ Please wait before joining/leaving again!', ephemeral: true });
     }
 
@@ -59,16 +70,14 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       return await interaction.reply({ content: '⚠️ You are not in this giveaway!', ephemeral: true });
     }
 
-    // ✅ **Check if user has a blacklisted role**
     const blacklistedRoles = await BlacklistedRoles.findAll({ where: { guildId } });
     const blacklistedRoleIds = blacklistedRoles.map(entry => entry.roleId);
 
     const member = await interaction.guild?.members.fetch(userId).catch(() => null);
     if (member && member.roles.cache.hasAny(...blacklistedRoleIds)) {
-      return await interaction.reply({ content: "❌ You are **blacklisted** from joining giveaways!", ephemeral: true });
+      return await interaction.reply({ content: "❌ You are blacklisted from joining giveaways!", ephemeral: true });
     }
 
-    // ✅ **Update Participants**
     if (isJoining) {
       participants.push(userId);
       await incrementStat(userId, guildId, 'joined');
@@ -78,43 +87,49 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     await giveaway.update({ participants: JSON.stringify(participants) });
 
-    // ✅ **Update Embed (Participants Count)**
     let embed = EmbedBuilder.from(interaction.message.embeds[0]);
 
     if (!embed.data.fields) {
       embed.setFields([]);
     }
 
-    const totalParticipantsIndex = embed.data.fields?.findIndex(f => f.name.includes('🎟️ Total Participants')) ?? -1;
+// 🛡️ Safe type assertion
+    const fields = embed.data.fields!;
 
-    if (totalParticipantsIndex !== -1) {
-      embed.spliceFields(totalParticipantsIndex, 1, { name: '🎟️ Total Participants', value: `${participants.length} users`, inline: true });
+    const fieldIndex = fields.findIndex(f => f.name.includes('🎟️ Total Participants'));
+    if (fieldIndex !== -1) {
+      embed.spliceFields(fieldIndex, 1, {
+        name: '🎟️ Total Participants',
+        value: `${participants.length} users`,
+        inline: true,
+      });
     } else {
-      embed.addFields({ name: '🎟️ Total Participants', value: `${participants.length} users`, inline: true });
+      embed.addFields({
+        name: '🎟️ Total Participants',
+        value: `${participants.length} users`,
+        inline: true,
+      });
     }
 
-    // ✅ **Modify Buttons WITHOUT Disabling Them**
-    const updatedButtons = interaction.message.components.map(row => {
-      return new ActionRowBuilder<ButtonBuilder>().addComponents(
-          row.components.map(component => ButtonBuilder.from(component as unknown as ButtonBuilder))
-      );
-    });
+    const updatedButtons = interaction.message.components.map(row =>
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+            row.components.map(component =>
+                ButtonBuilder.from(component as unknown as ButtonBuilder)
+            )
+        )
+    );
 
-    // ✅ **Edit the original message for all users without disabling buttons**
     await interaction.message.edit({ embeds: [embed], components: updatedButtons });
 
-    // ✅ **Send an Ephemeral Response to the User**
     await interaction.reply({
       content: isJoining
-          ? '✅ **You have successfully joined the giveaway!** 🎉'
-          : '❌ **You have left the giveaway.**',
-      ephemeral: true
+          ? '✅ You have successfully joined the giveaway! 🎉'
+          : '❌ You have left the giveaway.',
+      ephemeral: true,
     });
 
   } catch (error) {
     console.error('❌ Error handling giveaway join/leave:', error);
-
-    // ✅ **Prevent Bot Crashes by Handling Errors Gracefully**
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: '❌ An error occurred. Please try again later.', ephemeral: true });
     }

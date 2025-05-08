@@ -259,8 +259,8 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     let giveawayMessage = await targetChannel.send({ embeds: [embed] });
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`join-${giveawayMessage.id}`).setLabel("Join 🐉").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`leave-${giveawayMessage.id}`).setLabel("Leave 💨").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`gwjoin-${giveawayMessage.id}`).setLabel("Join 🐉").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`gwleave-${giveawayMessage.id}`).setLabel("Leave 💨").setStyle(ButtonStyle.Danger)
     );
 
     await giveawayMessage.edit({ embeds: [embed], components: [row] });

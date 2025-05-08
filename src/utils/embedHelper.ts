@@ -1,13 +1,7 @@
 import { EmbedBuilder, Message } from 'discord.js';
 import { Giveaway } from '../models/Giveaway';
 
-/**
- * Generates a consistent giveaway embed for both `giveaway.ts` and `customGiveaway.ts`
- * - Ensures `title`, `fields`, `description`, and `winners` persist across updates.
- * - Maintains Unix timestamp consistency for `endsAt`.
- * - Prevents any unexpected overwrites during updates.
- * - Ensures fields retain their original order.
- */
+
 export function generateGiveawayEmbed(giveaway: Giveaway, message?: Message): EmbedBuilder {
     const participants: string[] = typeof giveaway.participants === "string"
         ? JSON.parse(giveaway.participants)

@@ -225,11 +225,11 @@ export async function execute(message: Message, rawArgs: string[]) {
     // ✅ **Create "Join" and "Leave" Buttons**
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-            .setCustomId(`join-${giveawayMessage.id}`)
+            .setCustomId(`gwjoin-${giveawayMessage.id}`)
             .setLabel("Join 🎉")
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
-            .setCustomId(`leave-${giveawayMessage.id}`)
+            .setCustomId(`gwleave-${giveawayMessage.id}`)
             .setLabel("Leave 💨")
             .setStyle(ButtonStyle.Danger)
     );
