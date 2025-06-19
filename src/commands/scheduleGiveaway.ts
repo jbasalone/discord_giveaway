@@ -23,8 +23,10 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     const args = rawArgs.join(" ").match(/(?:[^\s"]+|"[^"]*")+/g)?.map(arg => arg.replace(/(^"|"$)/g, "")) || [];
+    console.log("[SCHEDULE_GIVEAWAY] Parsed args:", args);
     const type = args[0].toLowerCase();
     const templateOrTitle = args[1];
+    let targetChannelId = message.channel.id;
 
     let title: string;
     let templateId: number | null = null;
@@ -45,7 +47,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         winnerCount = savedTemplate.get("winnerCount") as number;
         extraFields = savedTemplate.get("extraFields") ? JSON.parse(savedTemplate.get("extraFields") as string) : {};
     } else {
-        return message.reply("❌ Invalid type. Use `template` or `custom`.");
+        return message.reply(`❌ Invalid type: \`${type}\`. Did you mean \`template\` or \`custom\`?`);
     }
 
     let scheduleTime = new Date();
@@ -54,6 +56,13 @@ export async function execute(message: Message, rawArgs: string[]) {
     let selectedRole: string | null = null;
 
     for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--channel" && args[i + 1]) {
+            let raw = args[i + 1].replace(/[<#>]/g, "");
+            if (/^\d+$/.test(raw)) {
+                targetChannelId = raw;
+            }
+            i++;
+        }
         if (args[i] === "--time" && args[i + 1]) {
             const timeString = args[i + 1];
 
@@ -81,7 +90,7 @@ export async function execute(message: Message, rawArgs: string[]) {
     const channelId = message.channel.id;
     await ScheduledGiveaway.create({
         guildId,
-        channelId,
+        channelId: targetChannelId,
         title,
         type: "template",
         templateId,

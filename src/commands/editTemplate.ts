@@ -22,6 +22,14 @@ import { sequelize } from "../database";
 const pendingEdits = new Map<string, Record<string, string | number>>();
 const templateMessageMap = new Map<string, string>();
 
+type SelectMenuOption = {
+    label: string;
+    value: string;
+    description?: string;
+    emoji?: string;
+    default?: boolean;
+};
+
 /** Generate Embed for Editing */
 async function generateEditEmbed(templateId: number | string): Promise<APIEmbed | null> {
     const numericTemplateId = parseInt(templateId as string, 10);
@@ -118,16 +126,29 @@ async function updateEditMessage(channel: TextChannel, templateId: number | stri
         return;
     }
 
-    const selectMenuOptions = embed.fields?.map(field => ({
-        label: field.name.substring(0, 25),
-        value: encodeURIComponent(field.name),
-        description: String(field.value).substring(0, 50),
-    })) || []; // ✅ Prevents crashes if `embed.fields` is undefined
+    const selectMenuOptions: SelectMenuOption[] = [];
+    const seenValues = new Set<string>();
+
+    embed.fields?.forEach((field, i) => {
+        let baseValue = encodeURIComponent(field.name);
+        let uniqueValue = baseValue;
+        let suffix = 1;
+        while (seenValues.has(uniqueValue)) {
+            uniqueValue = `${baseValue}_${suffix++}`;
+        }
+        seenValues.add(uniqueValue);
+        selectMenuOptions.push({
+            label: field.name.substring(0, 25),
+            value: uniqueValue,
+            description: String(field.value).substring(0, 50),
+        });
+    });
 
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(`edit-template-${numericTemplateId}`)
         .setPlaceholder("📝 Select a section to edit")
         .addOptions(selectMenuOptions);
+
 
     const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()

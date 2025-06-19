@@ -153,12 +153,15 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "Optional Flags: `[--winners]`", value: `Add pre-selected winners for Miniboss giveaways.` },
             ],
             "scheduling": [
-                { name: "🚀 Start a Scheduled Giveaway", value: `\`${prefix} ga schedule custom <title> <duration> <winnercount> -time 18:00 --repeat hourly\`` },
+                { name: "🚀 Start a Scheduled Giveaway", value: `\`${prefix} [BUGGY] ga schedule custom <title> <duration> <winnercount> -channel id|name -time 18:00 --repeat hourly\`` },
                 { name: "🚀 Start a Scheduled Giveaway From Templates", value: `\`${prefix} ga schedule template <templateid> -time 18:00 --repeat hourly\`` },
                 { name: "📜 List Schedules", value: `\`${prefix} ga listschedule\`` },
                 { name: "📜 Delete a Schedule", value: `\`${prefix} ga cancelschedule <id>\`` },
                 { name: "Flags: `[--time]`", value: `ex. --time 20:30, --time 2025-03-05 18:00 → (March 5, 2025, at 6:00 PM server time), --time 30s, --time 2d, --time 2m, --time 1740808623 (exact UTC format) ` },
                 { name: "Flags: `[--repeat]`", value: `ex. --repeat hourly | daily | weekly | monthly `},
+                { name: "Flags: `[--channel]`", value: `ex. --channel channelid|#channel `},
+
+
 
             ],
             "user": [
