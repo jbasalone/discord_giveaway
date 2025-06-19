@@ -54,7 +54,7 @@ export async function handleMinibossCommand(
     const sendCommandButtons = async () => {
         if (giveawayTerminated) return;
         const mentions = finalWinners.map(id => `<@${id}>`).join(" ");
-        const botCmd = `<@555955826880413696> miniboss ${mentions}`;
+        const botCmd = `rpg miniboss ${mentions}`;
 
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder().setCustomId(`desktop-command-${giveawayId}`).setLabel("🖥️ Desktop Cmd").setStyle(ButtonStyle.Primary),
