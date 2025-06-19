@@ -228,6 +228,29 @@ export async function handleGiveawayEnd(client: Client, giveawayId?: number) {
       content: `🎉 **Giveaway Ended!** 🎉\n🏆 **Winners:** ${winners}\n🔗 [Jump to Giveaway](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`,
     });
 
+    let hostId: string | undefined = undefined;
+    const rawHostId = giveaway.get("hostId") || giveaway.get("host");
+    if (typeof rawHostId === "string" && rawHostId.match(/^\d+$/)) {
+      hostId = rawHostId;
+    } else if (typeof rawHostId === "number") {
+      hostId = String(rawHostId);
+    }
+    if (hostId) {
+      try {
+        const hostUser = await client.users.fetch(hostId);
+        await hostUser.send(
+            `🎉 Your giveaway **"${giveaway.get("title")}"** in **${guild.name}** has ended!\n`
+            + `🏆 Winners: ${winners}\n`
+            + `🔗 [Jump to Giveaway](https://discord.com/channels/${guild.id}/${channel.id}/${giveaway.get("messageId")})`
+        );
+        console.log(`📩 DM sent to host (${hostId}) about the end of giveaway ${giveawayId}.`);
+      } catch (dmErr) {
+        console.error(`❌ Could not DM host (${hostId}) for ended giveaway ${giveawayId}:`, dmErr);
+      }
+    } else {
+      console.warn(`⚠️ Host ID missing for giveaway ${giveawayId}, can't send DM.`);
+    }
+
     await Giveaway.destroy({ where: { id: giveawayId } }); // ✅ remove from DB so it doesn't rerun
     cache.del(`giveaway-processing-${giveawayId}`);
     console.log(`✅ Giveaway ${giveawayId} successfully ended.`);
