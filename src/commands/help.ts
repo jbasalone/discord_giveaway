@@ -144,6 +144,8 @@ export async function handleHelpSelection(interaction: Interaction) {
                 { name: "📌 Set Summary Channel", value: `\`${prefix} ga setsummary #channel\`` },
             ],
             "miniboss": [
+                { name: "⚙️ Before Starting set your level", value: `\`${prefix} ga setlevel <level> <tt>\`` },
+                { name: "⚙️ Check your level", value: `\`${prefix} ga mylevel\`` },
                 { name: "🚀 Start a Miniboss Giveaway", value: `\`${prefix} ga miniboss <title> <duration> [--force]\`\n- **--force** allows starting with fewer than 9 participants.` },
                 { name: "⚔️ Alias for Miniboss Giveaway", value: `\`${prefix} ga mb <title> <duration>\`` },
                 { name: "Optional Flags: `[--host]`", value: `Sets a host for the giveaway, defaults to you.` },
