@@ -141,20 +141,34 @@ export async function execute(message: Message, rawArgs: string[]) {
 
         if (arg === "--role" && rawArgs.length > 0) {
             let nextArg = sanitizeArg(rawArgs.shift());
+
+            // NEW: Extract role ID from mention, if present
+            let mentionMatch = nextArg.match(/^<@&(\d+)>$/);
+            if (mentionMatch) {
+                nextArg = mentionMatch[1]; // Now just the digits
+            }
+
             let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
 
-            // ✅ If the role is found in mappings, replace it with the actual role ID
+            // Check mappings first
             if (roleMappings[nextArg]) {
                 roleId = roleMappings[nextArg];
             }
-            // ✅ Otherwise, assume it's a direct role ID (allow if valid)
+            // Or use the role ID directly if it exists
             else if (/^\d+$/.test(nextArg)) {
-                // ✅ Ensure the role exists in the guild before allowing it
                 let roleExists = message.guild.roles.cache.has(nextArg);
                 if (roleExists) {
                     roleId = nextArg;
                 } else {
                     return message.reply(`❌ The role ID **${nextArg}** is invalid or does not exist.`);
+                }
+            } else {
+                // (Optional) fallback for role names in the guild (case-insensitive)
+                let foundRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === nextArg.toLowerCase());
+                if (foundRole) {
+                    roleId = foundRole.id;
+                } else {
+                    return message.reply(`❌ The role **${nextArg}** is invalid or does not exist.`);
                 }
             }
         }
