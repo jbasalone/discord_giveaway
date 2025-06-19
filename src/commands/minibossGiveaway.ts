@@ -95,17 +95,26 @@ export async function execute(message: Message, rawArgs: string[]) {
 
     console.log(`🔍 [DEBUG] Fetching SavedGiveaway for template ID: ${templateId}`);
 
+    let title: string = "Miniboss Giveaway";
+    let durationMs: number = 60000; // Default to 1 minute
+    let winnerCount: number = 9;
     let savedGiveaway: SavedGiveaway | null = templateId !== null
         ? await SavedGiveaway.findOne({ where: { id: templateId } })
         : null;
 
     console.log(`✅ [DEBUG] SavedGiveaway Query Result:`, savedGiveaway ? savedGiveaway.toJSON() : "Not Found");
+
+    if (rawArgs.length > 0 && /^(\d+)(s|m|h|d)$/.test(rawArgs[0])) {
+        const durationStr = rawArgs.shift();
+        if (durationStr?.endsWith("s")) durationMs = parseInt(durationStr) * 1000;
+        else if (durationStr?.endsWith("m")) durationMs = parseInt(durationStr) * 60 * 1000;
+        else if (durationStr?.endsWith("h")) durationMs = parseInt(durationStr) * 60 * 60 * 1000;
+        else if (durationStr?.endsWith("d")) durationMs = parseInt(durationStr) * 24 * 60 * 60 * 1000;
+    }
+
     console.log(`✅ [DEBUG] [minibossGiveaway] Retrieved savedGiveaway ID: ${savedGiveaway?.get("id") || "Not Found"}`);
     console.log(`✅ [DEBUG] [minibossGiveaway]  Retrieved forceStart from savedGiveaway: ${savedGiveaway?.get("forceStart")}`);
-
-    let title: string = "Miniboss Giveaway";
-    let durationMs: number = 60000; // Default to 1 minute
-    let winnerCount: number = 9;
+    
     let extraFields: Record<string, string> = savedGiveaway
         ? JSON.parse(savedGiveaway.get("extraFields") || "{}")
         : {};
