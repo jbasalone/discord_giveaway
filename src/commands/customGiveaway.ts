@@ -109,25 +109,49 @@ export async function execute(
     else return message.reply(`❌ Invalid duration format: "${durationStr}". Example: \`30m\`, \`1h\`, \`2d\`.`);
 
     const options = {
-        roleId: null as string | null,
+        roleIds: [] as string[], // <-- Array of all valid role IDs
         hostId: message.author.id,
         extraFields: {} as Record<string, string>,
         useExtraEntries: false,
         imageUrl: null as string | null,
         thumbnailUrl: null as string | null
     };
+    const roleMappings = JSON.parse(guildSettings?.get("roleMappings") ?? "{}");
 
+    // Parse args for --role (support multi-role, comma and space separated, mentions, names, IDs)
     let i = 0;
     while (i < rawArgs.length) {
         const arg = sanitizeArg(rawArgs[i]);
 
         if (arg === '--role') {
-            const next = sanitizeArg(rawArgs[i + 1]);
-            if (next && !next.match(/^\d+[smhd]?$/)) {
-                options.roleId = next;
-                i += 2;
-                continue;
+            let roleArgs: string[] = [];
+            // Gather all role args until next flag or end
+            while (i + 1 < rawArgs.length && !rawArgs[i + 1].startsWith("--")) {
+                i++;
+                // Allow comma-splitting and trim
+                roleArgs.push(...sanitizeArg(rawArgs[i]).split(",").map(s => s.trim()).filter(Boolean));
             }
+            for (let rawRole of roleArgs) {
+                let mentionMatch = rawRole.match(/^<@&(\d+)>$/);
+                if (mentionMatch) rawRole = mentionMatch[1];
+                if (roleMappings[rawRole]) {
+                    if (!options.roleIds.includes(roleMappings[rawRole]))
+                        options.roleIds.push(roleMappings[rawRole]);
+                } else if (/^\d+$/.test(rawRole) && guild.roles.cache.has(rawRole)) {
+                    if (!options.roleIds.includes(rawRole))
+                        options.roleIds.push(rawRole);
+                } else {
+                    let foundRole = guild.roles.cache.find(r => r.name.toLowerCase() === rawRole.toLowerCase());
+                    if (foundRole && !options.roleIds.includes(foundRole.id)) {
+                        options.roleIds.push(foundRole.id);
+                    } else if (!scheduled) {
+                        await message.reply(`❌ The role **${rawRole}** is invalid or does not exist.`);
+                        return;
+                    }
+                }
+            }
+            i++;
+            continue;
         } else if (arg === '--host') {
             const next = sanitizeArg(rawArgs[i + 1]);
             const mentionMatch = next?.match(/^<@!?(\d+)>$/);
@@ -197,28 +221,13 @@ export async function execute(
     const defaultRole = guildSettings?.get("defaultGiveawayRoleId") ?? null;
 
     // --- Roles & Pings ---
-    let rolePings: string[] = [];
-    let roleId = options.roleId;
-    const roleMappings = JSON.parse(guildSettings?.get("roleMappings") ?? "{}");
-    if (roleId && roleMappings.hasOwnProperty(roleId)) {
-        roleId = roleMappings[roleId];
+    if (options.roleIds.length === 0 && defaultRole && guild.roles.cache.has(defaultRole)) {
+        options.roleIds.push(defaultRole);
     }
-    const roleList = roleId ? roleId.split(",") : [];
-    for (const id of roleList) {
-        if (guild.roles.cache.has(id)) {
-            rolePings.push(`<@&${id}>`);
-        } else if (!scheduled) {
-            return message.reply(`❌ The role ID **${id}** is invalid.`);
-        }
-    }
-    if (rolePings.length === 0 && defaultRole && guild.roles.cache.has(defaultRole)) {
-        rolePings.push(`<@&${defaultRole}>`);
-    }
-    if (rolePings.length === 0 && !scheduled) {
+    if (options.roleIds.length === 0 && !scheduled) {
         return message.reply("❌ No valid roles. Use `--role VIP` or set a default role.");
     }
-
-    const rolePing = rolePings.join(" ");
+    const rolePing = options.roleIds.map(id => `<@&${id}>`).join(" ");
     const hostUser: User = await clientObj.users.fetch(hostId).catch(() => message.author);
     const hostMention = hostUser ? `<@${hostUser.id}>` : `<@${message.author.id}>`;
 

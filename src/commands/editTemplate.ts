@@ -70,6 +70,7 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
     const extraFieldsArray: { name: string; value: string }[] = [];
     const fieldsToExclude = new Set(["id", "guildId", "type", "creator"]);
 
+
     function addField(name: string, value: unknown, isExtraField = false) {
         const valueStr = typeof value === "string" ? value : JSON.stringify(value);
         if (isExtraField) {
@@ -101,6 +102,13 @@ async function generateEditEmbed(templateId: number | string): Promise<APIEmbed 
     } catch (error) {
         console.error("❌ [ERROR] Failed to parse extraFields JSON:", error);
     }
+    fields.push({
+        name: "ℹ️ Role Field Format",
+        value:
+            "To use multiple roles, enter IDs, mentions, or names separated by spaces or commas.\n" +
+            "Examples:\n" +
+            "`123,456,789`  or  `<@&123> <@&456>`  or  `VIP,Giveaway`",
+    });
 
     return {
         title: `📝 Editing Template: ${mergedTemplate.title}`,

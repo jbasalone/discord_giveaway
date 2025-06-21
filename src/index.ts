@@ -106,7 +106,7 @@ async function startBot() {
       const guildId = message.guild.id;
       let prefix = await getGuildPrefix(guildId) || "!ga";
 
-      if (!message.content.startsWith(prefix)) return;
+      if (!message.content.toLowerCase().startsWith(prefix.toLowerCase())) return;
 
       const args = message.content.slice(prefix.length).trim().split(/\s+/);
       const subCommand = args.shift()?.toLowerCase();

@@ -12,40 +12,36 @@ export async function execute(message: Message, rawArgs: string[]) {
     const settings = await GuildSettings.findOne({ where: { guildId } });
     const prefix = settings?.get("prefix") || "!";
 
-
     if (rawArgs.length < 3) {
         return message.reply(
-            `❌ Invalid usage! Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User\n\`\`\``
+            `❌ Invalid usage! Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP,Mod --host @User\n\`\`\``
         );
     }
 
-    // ✅ **Improved Argument Parsing (Handles Quotes & Flags Properly)**
-    const args =
-        rawArgs
-            .join(" ")
-            .match(/(?:[^\s"]+|"[^"]*")+/g)
-            ?.map((arg) => arg.replace(/(^"|"$)/g, "")) || [];
+    const args = rawArgs
+        .join(" ")
+        .match(/(?:[^\s"]+|"[^"]*")+/g)
+        ?.map((arg) => arg.replace(/(^"|"$)/g, "")) || [];
 
     let fieldArgs: string[] = [];
     let mainArgs: string[] = [];
     let forceStart = false;
     let winnerCount: number | null = null;
-    let giveawayType: "custom" | "miniboss" = "custom"; // ✅ Default to `custom`
-    let selectedRole: string | null = null;
-    let hostId: string = message.author.id; // ✅ Default host is the user saving the template
-    let creatorId: string = message.author.id; // ✅ Track who created the template
+    let giveawayType: "custom" | "miniboss" = "custom";
+    let selectedRoles: string[] = [];
+    let hostId: string = message.author.id;
+    let creatorId: string = message.author.id;
     let imageUrl: string | null = null;
     let thumbnailUrl: string | null = null;
     let useExtraEntries = false;
 
-
-    // ✅ **Ensure `--type` is properly processed**
+    // --type flag
     if (args[0] === "--type" && args[1]) {
         const type = args[1].toLowerCase();
         if (type === "custom" || type === "miniboss") {
             giveawayType = type as "custom" | "miniboss";
         }
-        args.splice(0, 2); // Remove `--type custom` from args
+        args.splice(0, 2);
     } else {
         return message.reply(
             `❌ **Missing --type flag!** Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: Nitro\"\n\`\`\``
@@ -53,99 +49,89 @@ export async function execute(message: Message, rawArgs: string[]) {
     }
 
     for (let i = 0; i < args.length; i++) {
-
         if (args[i] === "--force") {
             forceStart = true;
         } else if (args[i] === "--field" && args[i + 1]) {
-            // ✅ Preserve entire field (handles quotes properly)
             let fieldValue = args[i + 1];
             while (i + 2 < args.length && !args[i + 2].startsWith("--")) {
                 fieldValue += " " + args[i + 2];
-                args.splice(i + 2, 1); // Remove merged elements
+                args.splice(i + 2, 1);
             }
             fieldArgs.push(fieldValue);
             i++;
         } else if (args[i] === "--role" && args[i + 1]) {
-            let roleArg = args[i + 1].trim();
-            let roleId: string | undefined;
+            // --- NEW MULTI-ROLE PARSING BLOCK ---
+            let roleChunk = args[i + 1]
+                .split(/[\s,]+/) // split by comma or whitespace
+                .map(r => r.trim())
+                .filter(Boolean);
 
-            // ✅ Check if role is a mention format <@&ROLE_ID>
-            const roleMatch = roleArg.match(/^<@&(\d+)>$/);
-            if (roleMatch) {
-                roleId = roleMatch[1]; // Extract Role ID from mention
-            } else if (/^\d{17,20}$/.test(roleArg)) {
-                roleId = roleArg; // Direct Role ID input (17-20 digit number)
-            }else if (args[i] === "--image" && args[i + 1]) {
-                    const next = args[i + 1];
-                    if (next.startsWith("http")) {
-                        imageUrl = next;
-                        i++;
-                    }
-            } else if (args[i] === "--thumbnail" && args[i + 1]) {
-                    const next = args[i + 1];
-                    if (next.startsWith("http")) {
-                        thumbnailUrl = next;
-                        i++;
-                    }
-            } else if (args[i] === "--extraentries") {
-                    useExtraEntries = true;
-            } else {
-                // ✅ Try to find role by **name** (case insensitive)
-                const foundRoleByName = message.guild.roles.cache.find(r => r.name.toLowerCase() === roleArg.toLowerCase());
-                if (foundRoleByName) {
-                    roleId = foundRoleByName.id;
+            for (let roleArg of roleChunk) {
+                let roleId: string | undefined;
+                const roleMatch = roleArg.match(/^<@&(\d+)>$/);
+                if (roleMatch) {
+                    roleId = roleMatch[1];
+                } else if (/^\d{17,20}$/.test(roleArg)) {
+                    roleId = roleArg;
+                } else {
+                    const foundByName = message.guild.roles.cache.find(
+                        r => r.name.toLowerCase() === roleArg.toLowerCase()
+                    );
+                    if (foundByName) roleId = foundByName.id;
                 }
-            }
 
-            // ✅ Validate Role Exists in Cache
-            let foundRole: Role | undefined = roleId ? message.guild.roles.cache.get(roleId) : undefined;
-
-            // ✅ Fetch Role from API if Not Found in Cache
-            if (!foundRole && roleId) {
-                try {
-                    const fetchedRole = await message.guild.roles.fetch(roleId).catch(() => undefined); // ✅ FIXED!
-                    foundRole = fetchedRole !== null ? fetchedRole : undefined; // ✅ Explicitly convert `null` to `undefined`
-                } catch (error) {
-                    console.error(`❌ Error fetching role ${roleId}:`, error);
+                let foundRole: Role | undefined = roleId ? message.guild.roles.cache.get(roleId) : undefined;
+                if (!foundRole && roleId) {
+                    try {
+                        const fetched = await message.guild.roles.fetch(roleId).catch(() => undefined);
+                        foundRole = fetched !== null ? fetched : undefined;
+                    } catch {}
                 }
-            }
 
-            // ❌ If still not found, show error and prevent invalid role assignment
-            if (!foundRole) {
-                return message.reply(`❌ Invalid role: **${roleArg}**. Please use a valid role mention, ID, or role name.`);
+                if (!foundRole) {
+                    return message.reply(`❌ Invalid role: **${roleArg}**. Please use a valid role mention, ID, or role name.`);
+                }
+                if (!selectedRoles.includes(foundRole.id)) selectedRoles.push(foundRole.id);
             }
-
-            selectedRole = foundRole.id; // ✅ Store the validated role ID
             i++;
         } else if (args[i] === "--host" && args[i + 1]) {
-            // ✅ Extract Host User ID (if mentioned)
             const mentionMatch = args[i + 1].match(/^<@!?(\d+)>$/);
             hostId = mentionMatch ? mentionMatch[1] : args[i + 1];
             i++;
+        } else if (args[i] === "--image" && args[i + 1]) {
+            const next = args[i + 1];
+            if (next.startsWith("http")) {
+                imageUrl = next;
+                i++;
+            }
+        } else if (args[i] === "--thumbnail" && args[i + 1]) {
+            const next = args[i + 1];
+            if (next.startsWith("http")) {
+                thumbnailUrl = next;
+                i++;
+            }
+        } else if (args[i] === "--extraentries") {
+            useExtraEntries = true;
         } else {
             mainArgs.push(args[i]);
         }
     }
 
-    // ✅ **Extract Required Parameters**
+    // Required params
     if (mainArgs.length < 2) {
         return message.reply(
-            `❌ Invalid usage! Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP --host @User\n\`\`\``
+            `❌ Invalid usage! Example:\n\`\`\`\n${prefix} ga save --type custom \"My Giveaway\" 30s --field \"Reward: 100 Gold\" --role VIP Mod --host @User\n\`\`\``
         );
     }
-
     const templateName = mainArgs.shift()?.toLowerCase() ?? "";
     const durationArg = mainArgs.shift()!;
-
-    // ✅ Convert duration to milliseconds
     const duration = convertToMilliseconds(durationArg);
     if (duration <= 0 || duration > 31536000 * 1000) {
         return message.reply(
             "❌ Invalid duration. Must be a positive number (max 1 year)."
         );
     }
-
-    // ✅ Auto-Assign Winner Count Based on Type
+    // Winner count
     if (mainArgs.length > 0) {
         const parsedWinnerCount = Number(mainArgs[0]);
         if (!isNaN(parsedWinnerCount) && Number.isInteger(parsedWinnerCount) && parsedWinnerCount > 0) {
@@ -153,12 +139,11 @@ export async function execute(message: Message, rawArgs: string[]) {
             mainArgs.shift();
         }
     }
-
     if (winnerCount === null) {
         winnerCount = giveawayType === "miniboss" ? (forceStart ? 9 : 0) : 1;
     }
 
-    // ✅ **Parse `--field` Values (Handles Multi-Colon Fields)**
+    // Parse extra fields
     let extraFields: Record<string, string> = {};
     fieldArgs.forEach((field) => {
         const splitIndex = field.indexOf(":");
@@ -169,13 +154,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         }
     });
 
-    // ✅ **Ensure Role is Set**
-    if (!selectedRole) {
-        selectedRole = "None";
-    }
-
-    // ✅ **Save Giveaway Template**
-    // ✅ Save Giveaway Template
+    // Save the template
     await SavedGiveaway.create({
         guildId: message.guild.id,
         name: templateName,
@@ -185,7 +164,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         duration,
         winnerCount,
         forceStart,
-        role: selectedRole,
+        role: selectedRoles.length ? selectedRoles.join(",") : "None",
         host: hostId,
         creator: creatorId,
         extraFields: Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : null,
@@ -194,8 +173,7 @@ export async function execute(message: Message, rawArgs: string[]) {
         useExtraEntries
     });
 
-// ✅ Format the Response Message (Embed-like structure)
     return message.reply(
-        `✅ **"${templateName}"** has been saved! \n👤 **Created By:** <@${creatorId}> \n📌 **Type:** ${giveawayType.toUpperCase()} \n⏳ **Duration:** ${durationArg} \n🏆 **Winners:** ${winnerCount} \n🚀 **Force Start:** ${forceStart ? "Enabled" : "Disabled"} \n👤 **Host:** <@${hostId}> \n📢 **Role Ping:** ${selectedRole ?? "None"} \n📋 **Fields:** ${Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : "None"}`
+        `✅ **"${templateName}"** has been saved! \n👤 **Created By:** <@${creatorId}> \n📌 **Type:** ${giveawayType.toUpperCase()} \n⏳ **Duration:** ${durationArg} \n🏆 **Winners:** ${winnerCount} \n🚀 **Force Start:** ${forceStart ? "Enabled" : "Disabled"} \n👤 **Host:** <@${hostId}> \n📢 **Role Ping(s):** ${selectedRoles.length ? selectedRoles.map(id => `<@&${id}>`).join(" ") : "None"} \n📋 **Fields:** ${Object.keys(extraFields).length > 0 ? JSON.stringify(extraFields) : "None"}`
     );
 }

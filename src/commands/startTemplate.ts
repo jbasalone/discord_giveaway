@@ -55,7 +55,10 @@ export async function execute(message: Message, rawArgs: string[], isScheduled =
         }
 
         if (host) argsToPass.push("--host", `<@${host}>`);
-        if (role && role !== "None") argsToPass.push("--role", role);
+        if (role && role !== "None") {
+            const roleList: string[] = role.split(/[ ,]+/).map((r: string) => r.trim()).filter(Boolean);
+            argsToPass.push("--role", ...roleList);
+        }
         if (imageUrl) argsToPass.push("--image", imageUrl);
         if (thumbnailUrl) argsToPass.push("--thumbnail", thumbnailUrl);
         if (useExtraEntries) argsToPass.push("--extraentries");

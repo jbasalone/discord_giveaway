@@ -72,6 +72,8 @@ export async function execute(message: Message, rawArgs: string[]) {
     let roleId: string | null = null;
     let hostId: string = message.author.id;
     let useExtraEntries = false;
+    let roleIds: string[] = [];
+
 
     // ✅ **Extract Title Properly**
     let title = "";
@@ -139,36 +141,32 @@ export async function execute(message: Message, rawArgs: string[]) {
     while (rawArgs.length > 0) {
         const arg = sanitizeArg(rawArgs.shift());
 
-        if (arg === "--role" && rawArgs.length > 0) {
-            let nextArg = sanitizeArg(rawArgs.shift());
-
-            // NEW: Extract role ID from mention, if present
-            let mentionMatch = nextArg.match(/^<@&(\d+)>$/);
-            if (mentionMatch) {
-                nextArg = mentionMatch[1]; // Now just the digits
-            }
-
+        if (arg === "--role") {
             let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
-
-            // Check mappings first
-            if (roleMappings[nextArg]) {
-                roleId = roleMappings[nextArg];
+            // Gather ALL role args until next flag or end
+            let roleArgs: string[] = [];
+            while (rawArgs.length > 0 && !rawArgs[0].startsWith("--")) {
+                // Allow comma split within one arg (e.g. "--role VIP,<@&123>,AnotherRole")
+                roleArgs.push(...sanitizeArg(rawArgs.shift()).split(",").map(s => s.trim()).filter(Boolean));
             }
-            // Or use the role ID directly if it exists
-            else if (/^\d+$/.test(nextArg)) {
-                let roleExists = message.guild.roles.cache.has(nextArg);
-                if (roleExists) {
-                    roleId = nextArg;
+            // Now: roleArgs = ["VIP", "<@&123>", "<@&456>", "AnotherRole", ...]
+            for (let rawRole of roleArgs) {
+                let mentionMatch = rawRole.match(/^<@&(\d+)>$/);
+                if (mentionMatch) rawRole = mentionMatch[1];
+                if (roleMappings[rawRole]) {
+                    if (!roleIds.includes(roleMappings[rawRole]))
+                        roleIds.push(roleMappings[rawRole]);
+                } else if (/^\d+$/.test(rawRole) && message.guild.roles.cache.has(rawRole)) {
+                    if (!roleIds.includes(rawRole))
+                        roleIds.push(rawRole);
                 } else {
-                    return message.reply(`❌ The role ID **${nextArg}** is invalid or does not exist.`);
-                }
-            } else {
-                // (Optional) fallback for role names in the guild (case-insensitive)
-                let foundRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === nextArg.toLowerCase());
-                if (foundRole) {
-                    roleId = foundRole.id;
-                } else {
-                    return message.reply(`❌ The role **${nextArg}** is invalid or does not exist.`);
+                    let foundRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === rawRole.toLowerCase());
+                    if (foundRole && !roleIds.includes(foundRole.id)) {
+                        roleIds.push(foundRole.id);
+                    } else {
+                        await message.reply(`❌ The role **${rawRole}** is invalid or does not exist.`);
+                        return;
+                    }
                 }
             }
         }
@@ -188,34 +186,21 @@ export async function execute(message: Message, rawArgs: string[]) {
         }
     }
 
-    const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
-    const channel = targetChannel;
-
-    let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
-    let roleMappings = JSON.parse(guildSettings.get("roleMappings") ?? "{}");
-    let resolvedRoleId = roleId && roleMappings[roleId] ? roleMappings[roleId] : null;
-    let rolePings: string[] = [];
-    let roleList = roleId ? roleId.split(",") : [];
-
-    for (let id of roleList) {
-        if (/^\d+$/.test(id) && message.guild.roles.cache.has(id)) { // ✅ Ensure role is valid before adding it
-            rolePings.push(`<@&${id}>`);
-        } else {
-            return message.reply(`❌ The role ID **${id}** is invalid or does not exist.`);
-        }
-    }
-
-    if (rolePings.length === 0) {
+    if (roleIds.length === 0) {
+        let defaultRole = guildSettings.get("defaultGiveawayRoleId") ?? null;
         if (defaultRole && message.guild.roles.cache.has(defaultRole)) {
-            rolePings.push(`<@&${defaultRole}>`);
+            roleIds.push(defaultRole);
             console.log("✅ [DEBUG] Using defaultGiveawayRoleId as fallback role.");
         } else {
             return message.reply("❌ No valid roles were provided, and no default role is set in server config. Use `--role VIP` or ask an admin to configure one.");
         }
     }
 
+    const endsAt = Math.floor(Date.now() / 1000) + Math.floor(durationMs / 1000);
+    const channel = targetChannel;
+
 // ✅ Join all role pings into one string
-    let rolePing = rolePings.join(" ");
+    let rolePing = roleIds.map(id => `<@&${id}>`).join(" ");
 
 
     // ✅ **Create Embed**
@@ -267,7 +252,8 @@ export async function execute(message: Message, rawArgs: string[]) {
         status:"approved",
         extraFields: JSON.stringify(extraFields),
         forceStart: false,
-        useExtraEntries
+        useExtraEntries,
+        roleRestriction: roleIds.join(",") // Optionally store role IDs in a DB column
     });
 
     startLiveCountdown(giveawayData.id, message.client);

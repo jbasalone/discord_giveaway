@@ -25,13 +25,19 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       return;
     }
 
+    // ✅ Defer IMMEDIATELY to avoid Discord timeouts
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true });
+    }
+
     const isJoining = interaction.customId.startsWith('gwjoin-');
     const userId = interaction.user.id;
     const guildId = interaction.guild?.id;
     const giveawayMessageId = interaction.customId.split('-')[1];
 
     if (!guildId) {
-      return await interaction.reply({ content: '❌ Guild ID missing.', ephemeral: true });
+      await interaction.editReply({ content: '❌ Guild ID missing.' });
+      return;
     }
 
     let giveaway = await Giveaway.findOne({ where: { messageId: giveawayMessageId } });
@@ -41,13 +47,15 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
     }
 
     if (!giveaway) {
-      return await interaction.reply({ content: '❌ This giveaway has ended or is corrupted.', ephemeral: true });
+      await interaction.editReply({ content: '❌ This giveaway has ended or is corrupted.' });
+      return;
     }
 
     const endsAt = giveaway.get('endsAt');
     const currentTime = Math.floor(Date.now() / 1000);
     if (endsAt <= currentTime) {
-      return await interaction.reply({ content: '❌ This giveaway has already ended!', ephemeral: true });
+      await interaction.editReply({ content: '❌ This giveaway has already ended!' });
+      return;
     }
 
     let participants: string[] = JSON.parse(giveaway.get('participants') || '[]');
@@ -58,24 +66,28 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     if (userGiveawayCooldowns.has(giveawayMessageId) &&
         Date.now() - userGiveawayCooldowns.get(giveawayMessageId)! < cooldownTime) {
-      return await interaction.reply({ content: '⚠️ Please wait before joining/leaving again!', ephemeral: true });
+      await interaction.editReply({ content: '⚠️ Please wait before joining/leaving again!' });
+      return;
     }
 
     userGiveawayCooldowns.set(giveawayMessageId, Date.now());
 
     if (isJoining && alreadyJoined) {
-      return await interaction.reply({ content: '⚠️ You have already joined this giveaway!', ephemeral: true });
+      await interaction.editReply({ content: '⚠️ You have already joined this giveaway!' });
+      return;
     }
     if (!isJoining && !alreadyJoined) {
-      return await interaction.reply({ content: '⚠️ You are not in this giveaway!', ephemeral: true });
+      await interaction.editReply({ content: '⚠️ You are not in this giveaway!' });
+      return;
     }
 
     const blacklistedRoles = await BlacklistedRoles.findAll({ where: { guildId } });
     const blacklistedRoleIds = blacklistedRoles.map(entry => entry.roleId);
 
     const member = await interaction.guild?.members.fetch(userId).catch(() => null);
-    if (member && member.roles.cache.hasAny(...blacklistedRoleIds)) {
-      return await interaction.reply({ content: "❌ You are blacklisted from joining giveaways!", ephemeral: true });
+    if (member && blacklistedRoleIds.length && member.roles.cache.hasAny(...blacklistedRoleIds)) {
+      await interaction.editReply({ content: "❌ You are blacklisted from joining giveaways!" });
+      return;
     }
 
     if (isJoining) {
@@ -93,7 +105,6 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
       embed.setFields([]);
     }
 
-// 🛡️ Safe type assertion
     const fields = embed.data.fields!;
 
     const fieldIndex = fields.findIndex(f => f.name.includes('🎟️ Total Participants'));
@@ -121,11 +132,10 @@ export async function executeJoinLeave(interaction: ButtonInteraction) {
 
     await interaction.message.edit({ embeds: [embed], components: updatedButtons });
 
-    await interaction.reply({
+    await interaction.editReply({
       content: isJoining
           ? '✅ You have successfully joined the giveaway! 🎉'
           : '❌ You have left the giveaway.',
-      ephemeral: true,
     });
 
   } catch (error) {
