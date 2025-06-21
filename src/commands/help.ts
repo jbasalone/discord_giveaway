@@ -1,218 +1,381 @@
-import { Message, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, Interaction } from 'discord.js';
+import {
+    Message,
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    Interaction
+} from 'discord.js';
 import { GuildSettings } from '../models/GuildSettings';
+
 
 export async function execute(message: Message) {
     try {
-        // 🛠️ Fetch the guild's custom prefix or fallback to "!"
+        // Fetch the guild's custom prefix or fallback to "!"
         const guildId = message.guild?.id;
-        let prefix = "!"; // Default
-
+        let prefix = "!";
         try {
             const guildSettings = await GuildSettings.findOne({ where: { guildId } });
-
-            if (guildSettings) {
-                prefix = String(guildSettings?.get("prefix") || "!").trim();
-            } else {
-                console.warn(`⚠️ [WARNING] No GuildSettings found for guild ${guildId}, using default prefix.`);
-            }
+            if (guildSettings) prefix = String(guildSettings?.get("prefix") || "!").trim();
         } catch (error) {
-            console.error(`❌ [ERROR] Failed to retrieve prefix for guild ${guildId}:`, error);
+            console.error(`[Help] Failed to get prefix for guild ${guildId}:`, error);
         }
 
-        console.log(`📌 [DEBUG] Retrieved Prefix for Guild (${guildId}):`, prefix); // Debug to check retrieved prefix
-
         const embed = new EmbedBuilder()
-            .setTitle(`Giveaway Bot Help Menu`)
-            .setDescription(`Use the menu below to explore command categories. Commands are prefixed with \`${prefix}\`. 
-            \n🚀New to GA Bot? use \`${prefix} ga startup\` for a quick guide`)
-            .setColor("Blue");
+            .setTitle("🤖 Giveaway Bot Help Menu")
+            .setDescription([
+                `**Welcome!** Use the menu below to explore commands.`,
+                `Most commands use the prefix \`${prefix}\`.`,
+                "",
+                `💡 **First time?** Try \`${prefix} ga startup\` for a step-by-step guide!`,
+                "",
+                "🔽 **Pick a category below to get started!**"
+            ].join("\n"))
+            .setColor("Blue")
+            .setFooter({ text: "Pro tip: Try a category, or type /ga startup to get a walkthrough!" });
 
         const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId("help-menu")
-                .setPlaceholder("📜 Select a command category...")
+                .setPlaceholder("📜 Choose a command category...")
                 .addOptions(
-                    { label: "📢 About the Bot", value: "about" },
-                    { label: "🎉 Basic Commands", value: "basic" },
-                    { label: "📜 Template Commands", value: "template" },
-                    { label: "⏲ Scheduling Commands", value: "scheduling" },
-                    { label: "⚙️ Admin Commands", value: "admin" },
-                    { label: "👑 Miniboss Commands", value: "miniboss" },
-                    { label: "🕵️ Secret Giveaway", value: "secret" },
-                    { label: "🛡️ User Commands", value: "user" },
-                    { label: "🚀 Advanced Flags & Examples", value: "flags" }
+                    { label: "🤔 About the Bot", value: "about" },
+                    { label: "🚦 Quick Start", value: "quickstart" },
+                    { label: "🎉 Basic Giveaways", value: "basic" },
+                    { label: "🛠 Custom & Pro Giveaways", value: "custom" },
+                    { label: "📝 Templates", value: "template" },
+                    { label: "👑 Miniboss Mode", value: "miniboss" },
+                    { label: "⏲ Scheduling", value: "scheduling" },
+                    { label: "⚙️ Admin Setup", value: "admin" },
+                    { label: "🙋 User Commands", value: "user" },
+                    { label: "🚀 Advanced Tips", value: "flags" }
                 )
         );
 
         await message.reply({ embeds: [embed], components: [row] });
-
     } catch (error) {
-        console.error("❌ Error displaying help:", error);
-        return message.reply("❌ An error occurred while displaying help.");
+        console.error("[Help] Error displaying help:", error);
+        return message.reply("❌ Oops! Couldn't show the help menu. Please try again.");
     }
 }
 
+/**
+ * Handles Select Menu interaction for help categories.
+ */
 export async function handleHelpSelection(interaction: Interaction) {
     if (!interaction.isStringSelectMenu()) return;
 
     try {
         const category = interaction.values[0];
         const guildId = interaction.guildId;
-          let prefix = "!"; // Default
-
+        let prefix = "!";
         try {
-                const guildSettings = await GuildSettings.findOne({ where: { guildId } });
-                if (guildSettings) {
-                    prefix = String(guildSettings?.get("prefix") || "!").trim();
-                } else {
-                    console.warn(`⚠️ [WARNING] No GuildSettings found for guild ${guildId}, using default prefix.`);
-                }
-            } catch (error) {
-                console.error(`❌ [ERROR] Failed to retrieve prefix for guild ${guildId}:`, error);
+            const guildSettings = await GuildSettings.findOne({ where: { guildId } });
+            if (guildSettings) prefix = String(guildSettings?.get("prefix") || "!").trim();
+        } catch (error) {
+            console.error(`[Help] Failed to get prefix for guild ${guildId}:`, error);
+        }
+
+        // --- Command Content ---
+        // All descriptions are friendly, with examples & “try this” lines!
+        const helpContent: Record<string, { title: string; fields: { name: string, value: string }[] }> = {
+            "about": {
+                title: "🤔 What can this bot do?",
+                fields: [
+                    {
+                        name: "🎉 Simple & Custom Giveaways",
+                        value: "Start quick giveaways, or make complex ones with custom roles, fields, images, and more."
+                    },
+                    {
+                        name: "📦 Templates",
+                        value: "Save your favorite giveaway setups for instant re-use!"
+                    },
+                    {
+                        name: "⏲ Scheduled Giveaways",
+                        value: "Let the bot run daily/weekly/monthly events for you—set it and forget it!"
+                    },
+                    {
+                        name: "👑 Miniboss Mode",
+                        value: "Run 'miniboss' events for certain roles or special occasions."
+                    },
+                    {
+                        name: "🙋 User & Admin Features",
+                        value: "Admins can limit who can start giveaways, set bonus entries, and more. Users can join, check, and customize their notifications."
+                    },
+                    {
+                        name: "🆘 Need a walkthrough?",
+                        value: `Run \`${prefix} ga startup\` for a hands-on setup guide.`
+                    }
+                ]
+            },
+            "quickstart": {
+                title: "🚦 Quick Start",
+                fields: [
+                    {
+                        name: "✨ Start a giveaway instantly",
+                        value: [
+                            `\`${prefix} ga create "Nitro Drop" 1m 1 --role @GiveawayPings\``,
+                            "Starts a 1-minute, 1-winner giveaway and pings @GiveawayPings."
+                        ].join("\n")
+                    },
+                    {
+                        name: "💡 Tip: Use quotes for multi-word titles!",
+                        value: `\`${prefix} ga create "Big Event" 2m 2\``
+                    },
+                    {
+                        name: "📋 What do the numbers mean?",
+                        value: [
+                            "- The **first number** is duration (e.g. `1m` = 1 minute, `30s` = 30 seconds, `2h` = 2 hours)",
+                            "- The **second number** is number of winners"
+                        ].join("\n")
+                    },
+                    {
+                        name: "🆘 Try More:",
+                        value: `See more categories below, or type \`${prefix} ga help\` anytime!`
+                    }
+                ]
+            },
+            "basic": {
+                title: "🎉 Basic Giveaways",
+                fields: [
+                    {
+                        name: "🚀 Start a quick giveaway",
+                        value: `\`${prefix} ga create "Prize Name" 30s 1 --role @VIP\``
+                    },
+                    {
+                        name: "✨ You can also...",
+                        value: [
+                            "- Add a channel mention at the end to run it elsewhere: `... #general`",
+                            "- Leave out the title for a generic one: `!ga create 30s 1`"
+                        ].join("\n")
+                    },
+                    {
+                        name: "🔄 Reroll Winners",
+                        value: `\`${prefix} ga reroll <messageID>\` — Pick new winners instantly.`
+                    },
+                    {
+                        name: "❌ Cancel an active giveaway",
+                        value: `\`${prefix} ga cancel <messageID>\``
+                    },
+                    {
+                        name: "🔍 Check a giveaway",
+                        value: `\`${prefix} ga check <messageID>\``
+                    },
+                    {
+                        name: "📜 List all ongoing giveaways",
+                        value: `\`${prefix} ga listga\``
+                    }
+                ]
+            },
+            "custom": {
+                title: "🛠 Custom & Pro Giveaways",
+                fields: [
+                    {
+                        name: "🌟 Custom giveaways: fully customizable",
+                        value: [
+                            `\`${prefix} ga custom "Event Title" 5m 2 --role @VIP --extraentries --field "Requirement: Level 100+" --image http://img.com/pic.jpg\``,
+                            "",
+                            "You can add:",
+                            "- `--role` (mention, name, or ID; multiple allowed)",
+                            "- `--extraentries` (enables bonus entry system)",
+                            "- `--field \"Key: Value\"` (any extra field in the embed)",
+                            "- `--host @User` (set a different host)",
+                            "- `--image` or `--thumbnail` (image/thumbnail URL or attachment)"
+                        ].join("\n")
+                    },
+                    {
+                        name: "⚡ Pro Example",
+                        value: [
+                            `\`${prefix} ga custom "VIP Mega Drop" 2h 4 --role @VIP,@Super --field "Prize: Nitro" --field "Special: Top 3 get bonus" --image https://...jpg\``
+                        ].join("\n")
+                    }
+                ]
+            },
+            "template": {
+                title: "📝 Templates",
+                fields: [
+                    {
+                        name: "💾 Save a setup for next time",
+                        value: [
+                            `\`${prefix} ga save --type custom "Nitro Rush" 10m 2 --role @Giveaway --field "Prize: Discord Nitro"\``,
+                            "Give your template a name (here: **Nitro Rush**), then reuse it instantly!"
+                        ].join("\n")
+                    },
+                    {
+                        name: "🚀 Start from a template",
+                        value: [
+                            `\`${prefix} ga starttemplate <templateID>\` — Instantly launches a saved setup.`
+                        ].join("\n")
+                    },
+                    {
+                        name: "📜 List your templates",
+                        value: `\`${prefix} ga listtemplates --mine\``
+                    },
+                    {
+                        name: "🛠 Edit a template",
+                        value: `\`${prefix} ga edit <templateID>\``
+                    },
+                    {
+                        name: "❌ Delete a template",
+                        value: `\`${prefix} ga delete <templateID>\``
+                    }
+                ]
+            },
+            "miniboss": {
+                title: "👑 Miniboss Mode",
+                fields: [
+                    {
+                        name: "⚔️ What is Miniboss?",
+                        value: "A special high-stakes giveaway for servers running Epic RPG, with stricter rules and bonus support for elite players."
+                    },
+                    {
+                        name: "🚀 Start a Miniboss giveaway",
+                        value: [
+                            `\`${prefix} ga miniboss "Boss Battle" 1h --field "Requirement: Level 100" --role @VIP --force\``,
+                            "- Use `--force` to bypass minimum participants (if allowed)."
+                        ].join("\n")
+                    },
+                    {
+                        name: "⚙️ Set your RPG level & TT",
+                        value: `\`${prefix} ga setlevel <level> <ttLevel>\``
+                    },
+                    {
+                        name: "📊 Check your level",
+                        value: `\`${prefix} ga mylevel\``
+                    }
+                ]
+            },
+            "scheduling": {
+                title: "⏲ Scheduling",
+                fields: [
+                    {
+                        name: "🗓 Schedule a giveaway for later",
+                        value: [
+                            `\`${prefix} ga schedule custom "Friday Night" 1h 2 --time 20:30 --repeat weekly --role @Event\``,
+                            "- Schedule from template: `ga schedule template <id> --time 20:00`"
+                        ].join("\n")
+                    },
+                    {
+                        name: "📋 List scheduled giveaways",
+                        value: `\`${prefix} ga listschedule\``
+                    },
+                    {
+                        name: "❌ Delete a scheduled giveaway",
+                        value: `\`${prefix} ga cancelschedule <id>\``
+                    }
+                ]
+            },
+            "admin": {
+                title: "⚙️ Admin Setup & Tools",
+                fields: [
+                    {
+                        name: "🛡 Limit giveaway creation to roles",
+                        value: `\`${prefix} ga setrole --allowed add/remove <role>\``
+                    },
+                    {
+                        name: "📋 Set bonus entries for roles",
+                        value: `\`${prefix} ga setextraentry @role 2\` (users with this role get 2 extra chances)`
+                    },
+                    {
+                        name: "🚫 Blacklist a role",
+                        value: `\`${prefix} ga setblacklist @role\``
+                    },
+                    {
+                        name: "🔗 Restrict giveaways to channels",
+                        value: `\`${prefix} ga setchannel add #channel\``
+                    },
+                    {
+                        name: "📋 View settings",
+                        value: `\`${prefix} ga showconfig\``
+                    }
+                ]
+            },
+            "user": {
+                title: "🙋 User Commands",
+                fields: [
+                    {
+                        name: "🔢 Set your level/TT",
+                        value: `\`${prefix} ga setlevel <level> <ttLevel>\``
+                    },
+                    {
+                        name: "📊 Check your info",
+                        value: `\`${prefix} ga mylevel\``
+                    },
+                    {
+                        name: "📜 List ongoing giveaways",
+                        value: `\`${prefix} ga listga\``
+                    }
+                ]
+            },
+            "flags": {
+                title: "🚀 Advanced Tips & Examples",
+                fields: [
+                    {
+                        name: "🏷 Add extra fields (requirements, notes, links...)",
+                        value: [
+                            `\`--field "Requirement: Level 100+"\``,
+                            `\`--field "Prize: Nitro"\``
+                        ].join("\n")
+                    },
+                    {
+                        name: "📢 Ping multiple roles",
+                        value: `\`--role @VIP @Winners AnotherRole\` or \`--role @VIP,@Winners\` (space or comma separated)`
+                    },
+                    {
+                        name: "🎨 Add an image or thumbnail",
+                        value: [
+                            "`--image <url or upload>`",
+                            "`--thumbnail <url or upload>`"
+                        ].join("\n")
+                    },
+                    {
+                        name: "💾 Save a custom setup",
+                        value: [
+                            `\`${prefix} ga save --type custom "Nitro Drop" 10m 2 --role @Event --field "Prize: Nitro"\``
+                        ].join("\n")
+                    },
+                    {
+                        name: "📋 Pro tip: Mix & match options!",
+                        value: [
+                            `\`${prefix} ga custom "Legendary" 1h 3 --role @Winners --extraentries --host @Admin --field "Note: This is epic!" --image http://pic.com/abc.jpg\``
+                        ].join("\n")
+                    }
+                ]
             }
-
-        // Replace "!ga" dynamically with the correct prefix
-        const commands: Record<string, { name: string; value: string }[]> = {
-            "about": [
-                { name: "🎉 What does this bot do?", value: `This bot allows servers to host giveaways with advanced customization, template saving for quick starts, automated prize drawing, and role-based restrictions.` },
-                { name: "🔹 Types of Giveaways", value: `- **Quick Giveaways**: Basic \`${prefix} ga create\` giveaways.\n- **Custom Giveaways**: Advanced giveaways with roles & extra entries.\n- **Miniboss Giveaways**: High-stakes giveaways with specific requirements.` },
-                { name: "🕵 Secret Giveaways", value: `Secret Giveaways randomly send join messages to random channels, and the first number of winners to join win.` },
-                { name: "🔑 User vs Admin", value: `- **Users**: Join giveaways, check status, set their levels.\n- **Admins**: Configure giveaway settings, set role permissions, restrict channels, etc.` },
-                { name: "🚀 Custom Structure Example", value: `\`${prefix} ga custom Mythic GA 1h 3 --role tt25--extraentries --field "Requirement: Level 100+"\`` },
-                { name: "🚀 Basic Structure Example", value: `\`${prefix} ga create Mythic GA 1h 3 --role tt25\`` },
-                { name: "🚀 Miniboss Structure Example", value: `\`${prefix} ga mb Mythic GA 1h --field "whatevertitle: whatever message" --role VIP\`` },
-                { name: "📜 Author", value: `Bot created by <@!936693149114449921>. If you are interested in using the bot, please contact the author.` },
-                { name: "🤲 Help Keep the Bot Running!", value: `The bot is **100% free**, and donations are **never required**. If you’d like to support server costs, visit: [Ko-fi](https://ko-fi.com/jenny_b)` },
-            ],
-            "basic": [
-                { name: "🚀 Basic Structure Example", value: `\`${prefix} ga create Mythic GA 20s 3 --role tt25 #channel\`` },
-                { name: "🚀 Basic Structure Example - Generic Title", value: `\`${prefix} ga create 1h 3 --role tt25\`` },
-                { name: "🚀 Custom Structure Example", value: `\`${prefix} ga custom Mythic GA 1h 3 --role tt25 --extraentries --field "Requirement: Level 100+"\`` },
-                { name: "Optional Flags: `[--host]`", value: `Sets a host for the giveaway, defaults to you.` },
-                { name: "Optional Flags: `[--field \"name: value\"]`", value: `Sets custom embed fields (e.g., \`req: Level 50+\`).` },
-                { name: "Optional Flags: `[--role \"rolename\"]`", value: `Pings a role when the giveaway starts.` },
-                { name: "Optional Flags: `[--extraentries]`", value: `Gives Users Extra Entries based on server config.` },
-                { name: "Optional Flags: `[--winners]`", value: `Add pre-selected winners (custom and miniboss only).` },
-                { name: "Optional Flags: `[--image]`", value: "- Allows an image in the embed as attachment or http address" },
-                { name: "Optional Flags: `[--thumbnail]`", value: "- allows a thumbnail as attachment or http address." },
-                { name: "🎉 Start a Quick Giveaway", value: `\`${prefix} ga create  <duration> <winners> --role <rolename>\`\nExample: \`${prefix} ga create Super GA 30s 1\`` },
-                { name: "🛠 Start a Custom Giveaway", value: `\`${prefix} ga custom <title> <duration> <winners> [--extraentries]\`\nExample: \`${prefix} ga custom Mythic Giveaway 1h 3\`` },
-                { name: "🔄 Reroll Winners", value: `\`${prefix} ga reroll <messageID>\`` },
-                { name: "❌ Cancel an Active Giveaway", value: `\`${prefix} ga cancel <messageID>\`` },
-                { name: "🔍 Check Giveaway Status", value: `\`${prefix} ga check <messageID> | all\`` },
-                { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listga\`` },
-                { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listga\`` },
-
-            ],
-            "template": [
-                { name: "💾 Save a Giveaway Template", value: `\`${prefix} ga save --type <custom|miniboss> <name> <duration> [winners]\`` },
-                { name: "🚀 Start a Giveaway from a Saved Template", value: `\`${prefix} ga starttemplate <ID>\`` },
-                { name: "📜 List All Saved Giveaway Templates", value: `\`${prefix} ga listtemplates --all\`` },
-                { name: "📜 List Your Saved Giveaway Templates", value: `\`${prefix} ga listtemplates --mine\`` },
-                { name: "🛠 Edit Your Template", value: `\`${prefix} ga edit 2 --role @GiveawayPings --field "Reward: Nitro"\`` },
-                { name: "❌ Delete a Saved Template", value: `\`${prefix} ga delete <ID>\`` },
-                { name: "Optional Flags: `[--host]`", value: "- Sets a host for the giveaway, defaults to you." },
-                { name: "Optional Flags: `[--field \"name: value\"]`", value: "- Sets custom embed fields (e.g., `req: Level 50+`)." },
-                { name: "Optional Flags: `[--role \"rolename\"]`", value: "- Pings a role when the giveaway starts." },
-                { name: "Optional Flags: `[--extraentries]`", value: "- Gives Users Extra Entries based on server config." },
-                { name: "Optional Flags: `[--force]`", value: "- Allows **Miniboss giveaways** to start with fewer participants." },
-                { name: "Optional Flags: `[--mine/all]`", value: "- lists only your templates or all templates." },
-                { name: "Optional Flags: `[--image]`", value: "- Allows an image in the embed as attachment or http address" },
-                { name: "Optional Flags: `[--thumbnail]`", value: "- allows a thumbnail as attachment or http address." },
-
-
-            ],
-            "admin": [
-                { name: "⚙️ Show Server Giveaway Settings", value: `\`${prefix} ga showconfig\`` },
-                { name: "➕ Add Bonus Entries for a Role", value: `\`${prefix} ga setextraentry @role <entries>\`` },
-                { name: "🚫 Blacklist a Role", value: `\`${prefix} ga setblacklist @role\`` },
-                { name: "📌 Restrict Giveaways to Specific Channels", value: `\`${prefix} ga setchannel add #channel\`` },
-                { name: "📜 List Configured Roles", value: `\`${prefix} ga listroles\`` },
-                { name: "👑 Restrict GA Creation to Specific Roles", value: `\`${prefix} ga setrole --allowed add/remove <roleid>\`` },
-                { name: "👑 Role Pings and Role Mapping", value: `\`${prefix} ga setrole --role add/remove rolename: <roleid>\`` },
-                { name: "👑 Set Miniboss Host Role", value: `\`${prefix} ga setrole --miniboss add/remove @role\`` },
-                { name: "⚙️ List Configured Miniboss Host Roles", value: `\`${prefix} ga listmbroles\``},
-                { name: "👑 Set Miniboss Channel", value: `\`${prefix} ga mbch #channel\`` },
-                { name: "🚫 Cancel a GA", value: `\`${prefix} ga cancel messasgeid\`` },
-
-            ],
-            "secret": [
-                { name: "🕵 About Secret Giveaway", value: `[UNDER DEVELOPMENT] Secret giveaways send random messages to random channels asking users to join. The first number of winners to join wins.` },
-                { name: "🚀 Start a Secret Giveaway", value: `\`${prefix} ga secret 10 48 "Hidden giveaway message!"\`` },
-                { name: "🔄 Turn Secret Giveaway On/Off", value: `\`${prefix} ga setsecret on|off\`` },
-                { name: "⚙️ Configure Secret Giveaway Categories", value: `\`${prefix} ga setsecret on|off <channelid> <channelid>\`` },
-                { name: "📌 Set Summary Channel", value: `\`${prefix} ga setsummary #channel\`` },
-            ],
-            "miniboss": [
-                { name: "⚙️ Before Starting set your level", value: `\`${prefix} ga setlevel <level> <tt>\`` },
-                { name: "⚙️ Check your level", value: `\`${prefix} ga mylevel\`` },
-                { name: "🚀 Start a Miniboss Giveaway", value: `\`${prefix} ga miniboss <title> <duration> [--force]\`\n- **--force** allows starting with fewer than 9 participants.` },
-                { name: "⚔️ Alias for Miniboss Giveaway", value: `\`${prefix} ga mb <title> <duration>\`` },
-                { name: "Optional Flags: `[--host]`", value: `Sets a host for the giveaway, defaults to you.` },
-                { name: "Optional Flags: `[--field \"name: value\"]`", value: `Sets custom embed fields (e.g., \`req: Level 50+\`).` },
-                { name: "Optional Flags: `[--role \"rolename\"]`", value: `Pings a role when the giveaway starts.` },
-                { name: "Optional Flags: `[--force]`", value: `Allows **Miniboss giveaways** to start with fewer participants.` },
-                { name: "Optional Flags: `[--winners]`", value: `Add pre-selected winners for Miniboss giveaways.` },
-            ],
-            "scheduling": [
-                { name: "🚀 Start a Scheduled Giveaway", value: `\`${prefix} [BUGGY] ga schedule custom <title> <duration> <winnercount> -channel id|name -time 18:00 --repeat hourly\`` },
-                { name: "🚀 Start a Scheduled Giveaway From Templates", value: `\`${prefix} ga schedule template <templateid> -time 18:00 --repeat hourly\`` },
-                { name: "📜 List Schedules", value: `\`${prefix} ga listschedule\`` },
-                { name: "📜 Delete a Schedule", value: `\`${prefix} ga cancelschedule <id>\`` },
-                { name: "Flags: `[--time]`", value: `ex. --time 20:30, --time 2025-03-05 18:00 → (March 5, 2025, at 6:00 PM server time), --time 30s, --time 2d, --time 2m, --time 1740808623 (exact UTC format) ` },
-                { name: "Flags: `[--repeat]`", value: `ex. --repeat hourly | daily | weekly | monthly `},
-                { name: "Flags: `[--channel]`", value: `ex. --channel channelid|#channel `},
-
-
-
-            ],
-            "user": [
-                { name: "🔢 Set Your RPG Level & TT Level", value: `\`${prefix} ga setlevel <level> <ttLevel>\`` },
-                { name: "📊 Check Your Level Settings", value: `\`${prefix} ga mylevel\`` },
-                { name: "📜 View Ongoing Giveaways", value: `\`${prefix} ga listga\`` },
-            ],
-            "flags": [
-                { name: "Optional Flags: `[--host]`", value: `Sets a host for the giveaway, defaults to you.` },
-                { name: "Optional Flags: `[--field \"name: value\"]`", value: `Sets custom embed fields (e.g., \`req: Level 50+\`).` },
-                { name: "Optional Flags: `[--role \"rolename\"]`", value: `Pings a role when the giveaway starts.` },
-                { name: "Optional Flags: `[--extraentries]`", value: `Gives Users Extra Entries based on server config.` },
-                { name: "Optional Flags: `[--force]`", value: `Allows Miniboss giveaways to start with fewer participants.` },
-                { name: "Optional Flags: `[--winners]`", value: `Add pre-selected winners for Miniboss only.` },
-            ]
         };
 
-        const selectedCommands = commands[category];
+        const { title, fields } = helpContent[category] || helpContent["about"];
 
         const embed = new EmbedBuilder()
-            .setTitle(`📜 ${category.charAt(0).toUpperCase() + category.slice(1)} Commands`)
-            .setDescription(`Here are the commands for this category (Prefix: \`${prefix}\`).`)
+            .setTitle(title)
+            .setDescription(`*Commands use prefix \`${prefix}\`. Need help? Use \`${prefix} ga startup\` for a guided tour!*`)
             .setColor("Blue")
-            .addFields(selectedCommands.map((cmd) => ({ name: cmd.name, value: cmd.value })));
+            .addFields(fields);
 
         const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId("help-menu")
-                .setPlaceholder("📜 Select another category...")
+                .setPlaceholder("📜 Choose another category...")
                 .addOptions(
-                    { label: "📢 About the Bot", value: "about" },
-                    { label: "🎉 Basic Commands", value: "basic" },
-                    { label: "📜 Template Commands", value: "template" },
-                    { label: "👑 Miniboss Commands", value: "miniboss" },
-                    { label:  "⏲ Scheduling Commands", value: "scheduling"},
-                    { label: "🚀 Advanced Flags & Examples", value: "flags" },
-                    { label: "🕵️ [UNDER DEVELOPMENT] Secret Giveaway", value: "secret" },
-                    { label: "🛡️ User Commands", value: "user" },
-                    { label: "⚙️ Admin Commands", value: "admin" }
+                    { label: "🤔 About the Bot", value: "about" },
+                    { label: "🚦 Quick Start", value: "quickstart" },
+                    { label: "🎉 Basic Giveaways", value: "basic" },
+                    { label: "🛠 Custom & Pro Giveaways", value: "custom" },
+                    { label: "📝 Templates", value: "template" },
+                    { label: "👑 Miniboss Mode", value: "miniboss" },
+                    { label: "⏲ Scheduling", value: "scheduling" },
+                    { label: "⚙️ Admin Setup", value: "admin" },
+                    { label: "🙋 User Commands", value: "user" },
+                    { label: "🚀 Advanced Tips", value: "flags" }
                 )
         );
 
         await interaction.update({
             embeds: [embed],
-            components: [row],
+            components: [row]
         });
 
     } catch (error) {
-        console.error("❌ Error handling help selection:", error);
-        await interaction.reply({ content: "❌ An error occurred while processing your selection.", ephemeral: true });
+        console.error("[Help] Error handling menu selection:", error);
+        await interaction.reply({ content: "❌ An error occurred while showing help. Try again.", ephemeral: true });
     }
 }
